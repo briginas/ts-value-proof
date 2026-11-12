@@ -1,0 +1,27 @@
+{
+  "name": "ts-value-proof",
+  "version": "0.1.0",
+  "description": "Typed TypeScript contracts with bigint, binary64 and UTF-16 string verification",
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "node scripts/check-contract-api.ts && node scripts/check.ts && node scripts/check-number.ts && node scripts/check-number-source.ts && npm run test:runtime",
+    "verify": "node scripts/verify.ts",
+    "test:runtime": "vitest run scripts/runtime.test.ts scripts/number-runtime.test.ts scripts/selective.test.ts scripts/string.test.ts --maxWorkers=1 --testTimeout=60000",
+    "generate-tests": "node scripts/regressions.ts"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "MIT",
+  "type": "module",
+  "devDependencies": {
+    "@types/node": "24.19.2",
+    "fast-check": "4.10.2",
+    "typescript": "5.9.3",
+    "vitest": "5.1.0",
+    "z3-solver": "4.16.0"
+  },
+  "private": true,
+  "engines": {
+    "node": "^24.12.0 || >=26.0.0"
+  }
+}
