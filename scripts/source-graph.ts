@@ -2,8 +2,15 @@ import path from "node:path";
 import ts from "typescript";
 import { fileURLToPath } from "node:url";
 import { InputDiagnostic, location } from "./diagnostics.ts";
+import fs from "node:fs";
 
-const apiFile = fileURLToPath(new URL("../src/contract.ts", import.meta.url));
+export function canonicalFile(file: string): string {
+  const absolute = path.resolve(file);
+  return fs.existsSync(absolute) ? fs.realpathSync(absolute) : absolute;
+}
+const apiFiles = new Set(["contract.ts", "contract.d.ts", "contract.js"].map(name =>
+  canonicalFile(fileURLToPath(new URL(`../src/${name}`, import.meta.url)))));
+export const isContractModule = (file: string): boolean => apiFiles.has(canonicalFile(file));
 const reserved = new Set(["requires", "ensures", "output", "BigInt", "result"]);
 
 export type SourceFunction = ts.FunctionDeclaration & { name: ts.Identifier; body: ts.Block };
@@ -25,11 +32,12 @@ export function sourceGraph(program: ts.Program, entry: ts.SourceFile) {
     return value.flags & ts.SymbolFlags.Alias ? checker.getAliasedSymbol(value) : value;
   }
   const isContract = (node: ts.Node): boolean => symbol(node).declarations?.some(d =>
-    ts.isFunctionDeclaration(d) && path.resolve(d.getSourceFile().fileName) === apiFile &&
+    ts.isFunctionDeclaration(d) && isContractModule(d.getSourceFile().fileName) &&
     d.name?.text === "contract") ?? false;
   const sources: ts.SourceFile[] = [];
   const seen = new Set<ts.SourceFile>();
   const active = new Set<ts.SourceFile>();
+  const edges = new Map<string, Map<string, string>>();
   function collect(source: ts.SourceFile): void {
     if (active.has(source)) unsupported(source, "cyclic module imports are not supported");
     if (seen.has(source)) return;
@@ -40,11 +48,14 @@ export function sourceGraph(program: ts.Program, entry: ts.SourceFile) {
     seen.add(source);
     active.add(source);
     sources.push(source);
+    const imports = new Map<string, string>();
+    edges.set(canonicalFile(source.fileName), imports);
     for (const statement of source.statements) {
       if (!ts.isImportDeclaration(statement) && !ts.isExportDeclaration(statement)) continue;
       const specifier = statement.moduleSpecifier;
       if (!specifier) continue;
-      if (!ts.isStringLiteral(specifier) || !/^\.{1,2}\//.test(specifier.text) || statement.attributes)
+      if (!ts.isStringLiteral(specifier) ||
+          (!/^\.{1,2}\//.test(specifier.text) && specifier.text !== "ts-value-proof") || statement.attributes)
         unsupported(statement, "only relative module imports without attributes are supported");
       const typeOnly = ts.isImportDeclaration(statement)
         ? statement.importClause?.isTypeOnly || (statement.importClause?.namedBindings &&
@@ -55,7 +66,10 @@ export function sourceGraph(program: ts.Program, entry: ts.SourceFile) {
       if (typeOnly) continue; // Already resolved and checked by TypeScript; never execute this edge.
       const target = symbol(specifier).declarations?.find(ts.isSourceFile);
       if (!target) unsupported(specifier, "module source not found");
-      if (path.resolve(target.fileName) !== apiFile) collect(target);
+      if (specifier.text === "ts-value-proof" && !isContractModule(target.fileName))
+        unsupported(specifier, "ts-value-proof must resolve to this verifier's trusted contract API");
+      imports.set(specifier.text, canonicalFile(target.fileName));
+      if (!isContractModule(target.fileName)) collect(target);
     }
     active.delete(source);
   }
@@ -149,5 +163,5 @@ export function sourceGraph(program: ts.Program, entry: ts.SourceFile) {
     }
     names.set(fn, name);
   }
-  return { sources, names, resolve, symbol, isContract };
+  return { sources, names, resolve, symbol, isContract, edges };
 }

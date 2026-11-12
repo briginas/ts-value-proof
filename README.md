@@ -51,5 +51,9 @@ or `unknown` (2). Try `examples/withdraw.ts` for an intentional contract violati
 Only a limited TypeScript subset is supported; contracts do not enforce runtime
 checks. Verification covers the declared contracts, not arbitrary program correctness.
 
+For production builds, the [Vite plugin](docs/vite.md) verifies selected modules
+and removes their contracts before JavaScript generation. The same verifier is
+available separately through the CLI. See the guide for local package installation.
+
 Usage & limitations: [English](docs/usage.md) · [Русский](docs/usage.ru.md) ·
 [Examples](examples/) · [Contributing](CONTRIBUTING.md) · [MIT license](LICENSE)

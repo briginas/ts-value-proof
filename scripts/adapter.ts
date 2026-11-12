@@ -1,10 +1,9 @@
 import { dependencies } from "./dependencies.ts";
 import { encodeNumber } from "./numeric-values.ts";
-import path from "node:path";
 import ts from "typescript";
 import type { Expr, FunctionIR, ProgramIR, SourceLocation, ValueSort } from "./ir.ts";
 import { returnExpression, validateIR, sourceInventory, type SourceStatement } from "./ir-integrity.ts";
-import { sourceGraph, unsupported as error, type SourceFunction } from "./source-graph.ts";
+import { canonicalFile, sourceGraph, unsupported as error, type SourceFunction } from "./source-graph.ts";
 import { InputDiagnostic, location, sourceLocation } from "./diagnostics.ts";
 
 export class UnsupportedNumericModel extends InputDiagnostic {
@@ -23,14 +22,29 @@ export function adapt(fileName: string): AdaptedSource {
   return prepareSource(fileName).ir;
 }
 
-/** One validated source snapshot shared by verification and test-only compilation. */
-export function prepareSource(fileName: string) {
-  fileName = path.resolve(fileName);
-  const program = ts.createProgram([fileName], {
+export type PreparedSource = ReturnType<typeof prepareSource>;
+
+/** One validated source snapshot shared by verification and compilation. */
+export function prepareSource(fileName: string, onInput?: (file: string) => void) {
+  fileName = canonicalFile(fileName);
+  const options: ts.CompilerOptions = {
     strict: true, noImplicitReturns: true, noEmit: true, skipLibCheck: true,
+    allowImportingTsExtensions: true,
     target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.NodeNext,
     moduleResolution: ts.ModuleResolutionKind.NodeNext,
-  });
+  };
+  const inputs = new Map<string, string | undefined>();
+  const host = ts.createCompilerHost(options);
+  const read = host.readFile.bind(host);
+  host.readFile = file => {
+    const key = canonicalFile(file);
+    if (!inputs.has(key)) {
+      onInput?.(key);
+      inputs.set(key, read(file));
+    }
+    return inputs.get(key);
+  };
+  const program = ts.createProgram([fileName], options, host);
   const diagnostics = ts.getPreEmitDiagnostics(program);
   if (diagnostics.length) {
     const first = diagnostics[0];
@@ -45,9 +59,10 @@ export function prepareSource(fileName: string) {
     if (!source.isDeclarationFile && /@ts-(ignore|nocheck|expect-error)/.test(source.text))
       error(source, "suppressed TypeScript diagnostics");
   const checker = program.getTypeChecker();
-  const { sources, names, resolve, symbol, isContract } = sourceGraph(program, sourceFile);
+  const { sources, names, resolve, symbol, isContract, edges: moduleEdges } = sourceGraph(program, sourceFile);
   const funcs = new Map([...names].map(([fn, name]) => [name, fn]));
   const contracts = new Map<string, ParsedContract>();
+  const contractStatements = new Set<ts.Statement>();
   for (const source of sources) for (const statement of source.statements) {
     if (ts.isImportDeclaration(statement) || ts.isExportDeclaration(statement) ||
         ts.isVariableStatement(statement) || ts.isFunctionDeclaration(statement) ||
@@ -76,6 +91,7 @@ export function prepareSource(fileName: string) {
     }
     if (!predicates.size) error(spec, "at least one predicate is required");
     contracts.set(name, { fn, predicates });
+    contractStatements.add(statement);
   }
   if (!contracts.size) throw new InputDiagnostic("No contracts found", "unsupported-code", location(sourceFile));
   function valueSort(node: ts.Node): ValueSort {
@@ -236,5 +252,5 @@ export function prepareSource(fileName: string) {
   const sorts = dependencies(programIR).sorts;
   if (sorts.has("int") && sorts.size > 1)
     throw new UnsupportedNumericModel("Mixed bigint with number/string dependencies is unsupported (mixed numeric model)", location(sourceFile));
-  return { ir: programIR, sources, names };
+  return { input: fileName, ir: programIR, sources, names, inputs, contractStatements, isContract, edges: moduleEdges };
 }
