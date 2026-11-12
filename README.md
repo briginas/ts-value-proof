@@ -29,7 +29,12 @@ contract(increment, {
 [Runnable example](examples/bigint-exact.ts).
 
 It also finds counterexamples and generates regression and property-based tests.
-Supports `bigint`, JavaScript `number`, and basic UTF-16 strings.
+
+🔴 **Limited support:**
+
+- **`bigint` / `number`:** addition (`+`), subtraction (`-`), unary minus (`-x`), and comparisons.
+- **UTF-16 strings:** concatenation (`+`), strict equality (`===`), strict inequality (`!==`), and `.length`.
+- **Unsupported arithmetic:** multiplication (`*`) and division (`/`).
 
 ## Try it
 
