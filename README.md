@@ -51,5 +51,5 @@ or `unknown` (2). Try `examples/withdraw.ts` for an intentional contract violati
 Only a limited TypeScript subset is supported; contracts do not enforce runtime
 checks. Verification covers the declared contracts, not arbitrary program correctness.
 
-[Usage & limitations (Russian)](docs/usage.ru.md) ·
+Usage & limitations: [English](docs/usage.md) · [Русский](docs/usage.ru.md) ·
 [Examples](examples/) · [Contributing](CONTRIBUTING.md) · [MIT license](LICENSE)
