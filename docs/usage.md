@@ -96,8 +96,14 @@ the static verifier does not execute the code.
   `tsconfig.json`. Type errors stop analysis; `@ts-ignore`, `@ts-nocheck`, and
   `@ts-expect-error` directives are not allowed.
 - Supported constructs include named synchronous functions with explicit types
-  for required parameters and the return value; `return`, `if/else`, blocks;
+  for required parameters and the return value; `return`, `if/else`, blocks, `switch`;
   `+`, `-`, unary minus, comparisons, `===`, `!==`, `&&`, `||`, and `!`.
+- `switch` supports `case`, `default` in any position, fallthrough, nested switches,
+  and unlabeled `break`, including inside `if`. Selection uses strict equality:
+  `NaN` never matches and `+0` matches `-0`. Selectors and case expressions must
+  have no calls, mutations, or property access except primitive string `.length`.
+  Existing type/model restrictions apply; missing return paths and labeled breaks
+  are not supported.
 - Local variables, mutations, loops, recursion, `async`, generics, overloads,
   optional/rest/default parameters, and the ternary operator are not yet supported.
   Multiplication, division, and other unsupported operations in a checked condition
@@ -105,6 +111,7 @@ the static verifier does not execute the code.
 - A contract must be an inline object with expression-bodied arrow predicates.
   Only one contract per function is allowed. Calls are allowed within return
   expressions; the called function must have a contract. Calls in `if` conditions,
+  `switch` selectors or case expressions,
   contract predicates, or arguments to other calls are not supported.
 - Verification covers the module graph reachable from the entry file. Relative
   named imports, re-exports, and function aliases are supported. External runtime

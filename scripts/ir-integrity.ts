@@ -5,24 +5,52 @@ import type { Expr, ProgramIR, SourceLocation, ValueSort } from "./ir.ts";
 export type SourceStatement =
   | { kind: "return"; value: Expr }
   | { kind: "block"; statements: SourceStatement[] }
-  | { kind: "if"; condition: Expr; then: SourceStatement; else?: SourceStatement };
+  | { kind: "if"; condition: Expr; then: SourceStatement; else?: SourceStatement }
+  | { kind: "switch"; value: Expr; clauses: { test?: Expr; body: SourceStatement }[] }
+  | { kind: "break" };
+
+type BreakTarget = { continuation: Expr | undefined };
 
 // Both branches inherit the remaining statements; return ends its path.
 // Continuations can share a source call, whose ID survives this lowering.
-export function returnExpression(statement: SourceStatement, continuation?: Expr): Expr | undefined {
+export function returnExpression(statement: SourceStatement, continuation?: Expr, breakTarget?: BreakTarget): Expr | undefined {
   switch (statement.kind) {
     case "return": return statement.value;
     case "block": {
       let result = continuation;
       for (let i = statement.statements.length - 1; i >= 0; i--)
-        result = returnExpression(statement.statements[i], result);
+        result = returnExpression(statement.statements[i], result, breakTarget);
       return result;
     }
     case "if": {
-      const yes = returnExpression(statement.then, continuation);
-      const no = statement.else ? returnExpression(statement.else, continuation) : continuation;
+      const yes = returnExpression(statement.then, continuation, breakTarget);
+      const no = statement.else ? returnExpression(statement.else, continuation, breakTarget) : continuation;
       if (!yes || !no) return undefined;
       return { kind: "ternary", condition: statement.condition, then: yes, else: no };
+    }
+    case "break": {
+      if (!breakTarget) throw new Error("break outside switch");
+      return breakTarget.continuation;
+    }
+    case "switch": {
+      // Execution falls through in source order, independently of case selection.
+      const entries: (Expr | undefined)[] = new Array(statement.clauses.length);
+      let next = continuation;
+      for (let i = statement.clauses.length - 1; i >= 0; i--)
+        entries[i] = next = returnExpression(statement.clauses[i].body, next, { continuation });
+
+      const defaultIndex = statement.clauses.findIndex(clause => clause.test === undefined);
+      let result = defaultIndex < 0 ? continuation : entries[defaultIndex];
+      // Default is selected only after all case tests fail, wherever it occurs.
+      for (let i = statement.clauses.length - 1; i >= 0; i--) {
+        const test = statement.clauses[i].test;
+        if (test === undefined) continue;
+        const body = entries[i];
+        if (!body || !result) return undefined;
+        result = { kind: "ternary", condition: { kind: "binary", op: "===", left: statement.value, right: test },
+          then: body, else: result };
+      }
+      return result;
     }
   }
 }

@@ -200,15 +200,33 @@ export function prepareSource(fileName: string, onInput?: (file: string) => void
         dependencies: [expression(node.operand, allowed, calls)] };
     } else error(node, ts.SyntaxKind[node.kind]);
   }
-  function statement(node: ts.Statement, allowed: ReadonlyMap<ts.Symbol, Expr>, calls: string[]): SourceStatement {
-    if (ts.isBlock(node)) return { kind: "block", statements: node.statements.map(s => statement(s, allowed, calls)) };
+  function switchExpression(node: ts.Expression, allowed: ReadonlyMap<ts.Symbol, Expr>): Expr {
+    // Reusing the selector in equality terms must not duplicate calls or getters.
+    function noGetter(part: ts.Node): void {
+      if ((ts.isPropertyAccessExpression(part) || ts.isElementAccessExpression(part)) && !stringLength(part))
+        error(part, "property access in switch selection is unsupported");
+      ts.forEachChild(part, noGetter);
+    }
+    noGetter(node);
+    return expression(node, allowed, false);
+  }
+  function statement(node: ts.Statement, allowed: ReadonlyMap<ts.Symbol, Expr>, calls: string[], inSwitch = false): SourceStatement {
+    if (ts.isBlock(node)) return { kind: "block", statements: node.statements.map(s => statement(s, allowed, calls, inSwitch)) };
     else if (ts.isReturnStatement(node) && node.expression)
       return { kind: "return", value: expression(node.expression, allowed, calls) };
     else if (ts.isIfStatement(node)) {
       requireBoolean(node.expression);
       return { kind: "if", condition: expression(node.expression, allowed, false),
-        then: statement(node.thenStatement, allowed, calls),
-        else: node.elseStatement ? statement(node.elseStatement, allowed, calls) : undefined };
+        then: statement(node.thenStatement, allowed, calls, inSwitch),
+        else: node.elseStatement ? statement(node.elseStatement, allowed, calls, inSwitch) : undefined };
+    } else if (ts.isSwitchStatement(node)) {
+      return { kind: "switch", value: switchExpression(node.expression, allowed),
+        clauses: node.caseBlock.clauses.map(clause => ({
+          test: ts.isCaseClause(clause) ? switchExpression(clause.expression, allowed) : undefined,
+          body: { kind: "block", statements: clause.statements.map(s => statement(s, allowed, calls, true)) },
+        })) };
+    } else if (ts.isBreakStatement(node) && !node.label && inSwitch) {
+      return { kind: "break" };
     } else error(node, ts.SyntaxKind[node.kind]);
   }
   for (const [name, fn] of funcs) {
