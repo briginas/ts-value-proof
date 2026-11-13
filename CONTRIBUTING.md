@@ -13,6 +13,13 @@ npm run test:package
 Generated fixtures and reports go into the ignored `work/` directory. Passing
 tests does not formally prove the verifier correct.
 
+Z3 is pinned to `z3-solver@5.4.1`, including upstream protection for native
+reference cleanup during asynchronous queries. `npm run test:solver` runs the
+GC regression from `npm test` separately: a child Node process uses `--expose-gc`
+to check live expressions, exact models, and repeated bigint verification while
+garbage collection runs. The parent terminates the child if it hangs. When
+upgrading Z3, run this check along with the full suite and package smoke test.
+
 `npm test` also runs real Vite builds and native build-watch checks. The separate
 package check installs a local tarball into a temporary project and needs npm
 registry access on a cold cache. See [Vite integration](docs/vite.md).
