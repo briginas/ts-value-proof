@@ -5,6 +5,7 @@ import type { Expr, FunctionIR, ProgramIR, SourceLocation, ValueSort } from "./i
 import { returnExpression, validateIR, sourceInventory, type SourceStatement } from "./ir-integrity.ts";
 import { canonicalFile, sourceGraph, unsupported as error, type SourceFunction } from "./source-graph.ts";
 import { InputDiagnostic, location, sourceLocation } from "./diagnostics.ts";
+import { destructuring } from "./destructuring.ts";
 
 export class UnsupportedNumericModel extends InputDiagnostic {
   constructor(message: string, source: SourceLocation) {
@@ -137,9 +138,9 @@ export function prepareSource(fileName: string, onInput?: (file: string) => void
       return { kind: "number", value: encodeNumber(Number(node.text.replaceAll("_", ""))) };
     }
     if (ts.isIdentifier(node)) {
-      const value = allowed.get(symbol(node));
+      const binding = valueSymbol(node);
+      const value = allowed.get(binding);
       if (value) return value;
-      const binding = symbol(node);
       if (["NaN", "Infinity"].includes(node.text) &&
           binding.declarations?.some(d => program.isSourceFileDefaultLibrary(d.getSourceFile())))
         return { kind: "number", value: encodeNumber(node.text === "NaN" ? NaN : Infinity) };
@@ -217,6 +218,47 @@ export function prepareSource(fileName: string, onInput?: (file: string) => void
     noGetter(node);
     return expression(node, allowed, false);
   }
+  function valueSymbol(node: ts.Identifier): ts.Symbol {
+    // Only the shorthand name denotes a property symbol. Its default RHS
+    // (e.g. x in {a = x}) must resolve as an ordinary value reference.
+    return ts.isShorthandPropertyAssignment(node.parent) && node.parent.name === node
+      ? checker.getShorthandAssignmentValueSymbol(node.parent) ?? symbol(node) : symbol(node);
+  }
+  function assignmentBinding(node: ts.Identifier, allowed: ReadonlyMap<ts.Symbol, Expr>): Extract<Expr, {kind: "ident"}> {
+    const target = valueSymbol(node);
+    const binding = allowed.get(target);
+    const mutable = target.declarations?.some(declaration => {
+      let owner: ts.Node = declaration;
+      while (ts.isBindingElement(owner) || ts.isObjectBindingPattern(owner) || ts.isArrayBindingPattern(owner)) owner = owner.parent;
+      return ts.isParameter(owner) || (ts.isVariableDeclaration(owner) &&
+        ts.isVariableDeclarationList(owner.parent) && !!(owner.parent.flags & ts.NodeFlags.Let));
+    });
+    if (!mutable || binding?.kind !== "ident") error(node, "assignment target must be a local let variable or parameter");
+    return binding;
+  }
+  function destructure(
+    pattern: ts.BindingPattern | ts.ArrayLiteralExpression | ts.ObjectLiteralExpression,
+    initializer: ts.Expression, allowed: Map<ts.Symbol, Expr>, declaration: boolean,
+  ): SourceStatement {
+    return destructuring(pattern, initializer, {
+      scalar: node => {
+        const type = checker.getTypeAtLocation(node);
+        const members = type.isUnion() ? type.types : [type];
+        if (!members.every(t => t.flags & (ts.TypeFlags.NumberLike | ts.TypeFlags.BigIntLike |
+          ts.TypeFlags.StringLike | ts.TypeFlags.BooleanLike | ts.TypeFlags.Null)))
+          error(node, "destructuring sources require literals with scalar leaves and statically known undefined");
+        return pureBodyExpression(node, allowed);
+      },
+      isUndefined: node => node.text === "undefined" && !allowed.has(valueSymbol(node)) &&
+        !!(checker.getTypeAtLocation(node).flags & ts.TypeFlags.Undefined) &&
+        !valueSymbol(node).declarations?.length,
+      target: (node, value) => {
+        const name = declaration ? `local:${node.getStart()}` : assignmentBinding(node, allowed).name;
+        if (declaration) allowed.set(symbol(node), {kind: "ident", name});
+        return {kind: "bind", name, value};
+      },
+    });
+  }
   function statements(nodes: readonly ts.Statement[], allowed: ReadonlyMap<ts.Symbol, Expr>, calls: string[], inSwitch: boolean): SourceStatement {
     const scope = new Map(allowed);
     return { kind: "block", statements: nodes.map(node => statement(node, scope, calls, inSwitch)) };
@@ -228,8 +270,10 @@ export function prepareSource(fileName: string, onInput?: (file: string) => void
       if (!(flags & (ts.NodeFlags.Const | ts.NodeFlags.Let)) || (flags & ts.NodeFlags.Using) || node.modifiers?.length)
         error(node, "only local const/let declarations are supported");
       return { kind: "block", statements: node.declarationList.declarations.map(declaration => {
-        if (!ts.isIdentifier(declaration.name) || !declaration.initializer || declaration.exclamationToken)
-          error(declaration, "local variables need a plain name and an initializer");
+        if (!declaration.initializer || declaration.exclamationToken)
+          error(declaration, "local variables need an initializer");
+        if (!ts.isIdentifier(declaration.name))
+          return destructure(declaration.name, declaration.initializer, allowed, true);
         const value = pureBodyExpression(declaration.initializer, allowed);
         // A source-only name preserves snapshots and shadowing until the
         // statements are lowered. ':' cannot occur in a TypeScript identifier.
@@ -240,15 +284,13 @@ export function prepareSource(fileName: string, onInput?: (file: string) => void
     } else if (ts.isExpressionStatement(node)) {
       let assignment = node.expression;
       while (ts.isParenthesizedExpression(assignment)) assignment = assignment.expression;
+      if (ts.isBinaryExpression(assignment) && assignment.operatorToken.kind === ts.SyntaxKind.EqualsToken &&
+        (ts.isArrayLiteralExpression(assignment.left) || ts.isObjectLiteralExpression(assignment.left)))
+        return destructure(assignment.left, assignment.right, allowed, false);
       if (!ts.isBinaryExpression(assignment) || !ts.isIdentifier(assignment.left) ||
           !["=", "+=", "-=", "*=", "/="].includes(assignment.operatorToken.getText()))
         error(node, "only standalone assignments to local let variables or parameters are supported");
-      const target = symbol(assignment.left);
-      const binding = allowed.get(target);
-      const mutable = target.declarations?.some(declaration => ts.isParameter(declaration) ||
-        (ts.isVariableDeclaration(declaration) && ts.isVariableDeclarationList(declaration.parent) &&
-          !!(declaration.parent.flags & ts.NodeFlags.Let)));
-      if (!mutable || binding?.kind !== "ident") error(assignment.left, "assignment target must be a local let variable or parameter");
+      const binding = assignmentBinding(assignment.left, allowed);
       const right = pureBodyExpression(assignment.right, allowed);
       const operator = assignment.operatorToken.getText();
       let value = right;

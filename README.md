@@ -33,12 +33,15 @@ The verifier also finds counterexamples and generates regression and property-ba
 - **Ternary expressions:** boolean conditions, branches of the same value kind, and nesting;
   only the selected branch executes. Supported in bodies and contract predicates.
   See [example](examples/ternary-expressions.ts) and [full limits](docs/usage.md#limitations).
-- **Local variables:** plain names, nested scopes, and shadowing; no calls in initializers.
+- **Local variables:** plain names or supported destructuring, nested scopes, and shadowing; no calls in initializers.
   See [example](examples/local-variables.ts) and [full limits](docs/usage.md#limitations).
 - **Assignments:** standalone `=`, `+=`, `-=`, `*=`, `/=` to local `let` variables
   and parameters, including across branches; string `+=` is supported.
   No calls on the right-hand side. See [example](examples/assignments.ts).
-- **Unsupported:** property writes, assignments inside expressions, `++`/`--`, other compound assignments, `var`, destructuring, loops,
+- **Destructuring:** local `const`/`let` and standalone assignments from object/array
+  literals, with nesting, renaming, skipped elements, and defaults. No rest/spread
+  or destructured parameters. See [example](examples/destructuring.ts) and [full limits](docs/usage.md#limitations).
+- **Unsupported:** property writes, assignments inside expressions, `++`/`--`, other compound assignments, `var`, loops,
   and `try/catch/finally`.
 
 **Value operations**

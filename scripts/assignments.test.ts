@@ -193,8 +193,8 @@ test("unsupported assignment contexts and targets are rejected before solving", 
     "x%=2n;", "x**=2n;", "x&=1n;", "x|=1n;", "x^=1n;", "x<<=1n;", "x>>=1n;",
     "x||=1n;", "x&&=1n;", "x??=1n;", "x++;", "--x;", "x=callee(x);",
     "let y=x; x=y=1n;", "let y=(x=1n);", "return x=1n;", "if((x=1n)>0n)return x;",
-    "switch(x=1n){case 1n:break;}", "switch(x){case x=1n:break;}", "[x]=[1n];",
-    "({x}={x:1n});", "return callee(x=1n);",
+    "switch(x=1n){case 1n:break;}", "switch(x){case x=1n:break;}",
+    "return callee(x=1n);",
   ];
   for(const [i,body] of bodies.entries()) {
     const entry=fixture("reject-"+i, `function callee(x:bigint):bigint{return x;}contract(callee,{ensures:r=>r>0n});

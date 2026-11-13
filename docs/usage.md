@@ -106,7 +106,7 @@ the static verifier does not execute the code.
   have no calls, mutations, or property access except primitive string `.length`.
   Existing type/model restrictions apply; missing return paths and labeled breaks
   are not supported.
-- Local `const` and `let` support plain names and required initializers, with or
+- Local `const` and `let` support plain names or the destructuring below and required initializers, with or
   without type annotations, including multiple declarations and block shadowing.
   Values can be used in returns, conditions, and call arguments. Initializers
   cannot contain calls or property access except primitive string `.length`.
@@ -122,6 +122,20 @@ the static verifier does not execute the code.
   contract parameters always refer to the original inputs. Preceding assignments
   remain checked even if overwritten, so a later guard cannot protect earlier
   division by zero. See [the assignments example](../examples/assignments.ts).
+- Destructuring supports local `const`/`let` and standalone `=` from object/array
+  literals: nesting, shorthand, renaming, string/numeric keys, skipped elements,
+  and defaults. For example, `[a, b] = [b, a]` snapshots both RHS values before
+  writing targets. Defaults run only for missing properties/elements, holes, or
+  global `undefined`, and can read earlier targets. All RHS values are evaluated,
+  including skipped elements and unused properties. Leaves must be scalar values;
+  `undefined` leaves need a default. Nested defaults may use object/array literals.
+  Rest/spread, computed keys, methods/getters, prototype setters (`__proto__`),
+  inherited property reads, aggregate variables or parameters as sources, aggregate
+  leaves, and property writes are rejected. Object patterns require object literals;
+  array patterns require array literals. Calls, getters, and mutations are rejected
+  even in unused defaults. Runtime-dependent `undefined` unions, type assertions,
+  and destructured function/contract parameters remain unsupported.
+  See [the destructuring example](../examples/destructuring.ts).
 - Ternary expressions (`condition ? yes : no`) support nesting, returns, operands,
   local initializers, assignment values, `if`/`switch` conditions, case expressions,
   call arguments, and contract predicates. Conditions must be boolean; both branches
@@ -133,7 +147,7 @@ the static verifier does not execute the code.
   Boolean parameters remain opaque: depending on one produces `unknown`.
   See [the ternary expressions example](../examples/ternary-expressions.ts).
 - Property/element writes, assignments inside expressions, `++`/`--`, other compound
-  assignments, `var`, destructuring, uninitialized locals, `using`, loops, recursion, `async`, generics, overloads,
+  assignments, `var`, uninitialized locals, `using`, loops, recursion, `async`, generics, overloads,
   and optional/rest/default parameters are not yet supported.
   Remainder, exponentiation, and other unsupported operations in a
   checked condition produce `unknown`.
