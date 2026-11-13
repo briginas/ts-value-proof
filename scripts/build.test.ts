@@ -76,6 +76,15 @@ test("real Vite build removes contracts without tree shaking and keeps source ma
   expect(chunk.map?.sources.some(file => file.endsWith("entry.ts"))).toBe(true);
 });
 
+test("Vite verifies and executes functions with local declarations", async () => {
+  const { root, entry } = fixture("locals", `export function f(x:bigint):bigint {
+    const next = x+1n; let doubled:bigint = next*2n; return doubled;
+  } contract(f,{ensures:(r,x)=>r===(x+1n)*2n});`);
+  const chunk = await bundle(config(root, entry));
+  expect(chunk.code).not.toMatch(/contract|ensures/);
+  expect((await execute(chunk.code)).f(12n)).toBe(26n);
+});
+
 test("aliases, mixed imports, local exports and star re-exports retain working functions", async () => {
   const { root, entry, api } = fixture("barrels");
   fs.writeFileSync(path.join(root, "impl.ts"), "export function f(x: bigint): bigint { return x + 1n; }");
@@ -111,7 +120,7 @@ test.each([
   ["inconsistent", valid.replace("ensures:", "requires: x => x > 0n && x < 0n, ensures:"), /inconsistent/],
   ["unknown", valid.replace("x + 1n", "x % 2n"), /unknown/],
   ["types", valid.replace("return x + 1n", 'return "bad"'), /not assignable/],
-  ["syntax", valid.replace("return x + 1n", "const y = x + 1n; return y"), /Unsupported/],
+  ["syntax", valid.replace("return x + 1n", "let y = x; y += 1n; return y"), /Unsupported/],
   ["bound", valid.replace("contract(f,", "const bound = contract(f,"), /Unsupported/],
 ])("Vite rejects %s before emitting new output", async (name, body, error) => {
   const { root, entry } = fixture(name, body);

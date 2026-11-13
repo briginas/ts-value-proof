@@ -28,9 +28,11 @@ The verifier also finds counterexamples and generates regression and property-ba
 
 **Code structure**
 
-- **Supported:** `return`, `if/else`, blocks, and `switch`
+- **Supported:** local `const`/`let` with initializers, `return`, `if/else`, blocks, and `switch`
   with fallthrough and unlabeled `break`.
-- **Unsupported:** local variables, assignments, loops,
+- **Local variables:** plain names, nested scopes, and shadowing; no calls in initializers.
+  See [example](examples/local-variables.ts) and [full limits](docs/usage.md#limitations).
+- **Unsupported:** assignments, `var`, destructuring, loops,
   ternary expressions (`?:`), and `try/catch/finally`.
 
 **Value operations**

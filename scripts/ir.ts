@@ -24,6 +24,7 @@ export type Expr =
   | { kind: "unary"; op: "-" | "!"; operand: Expr }
   | { kind: "binary"; op: "+" | "-" | "*" | "/" | "<" | "<=" | ">" | ">=" | "===" | "!==" | "&&" | "||"; left: Expr; right: Expr }
   | { kind: "ternary"; condition: Expr; then: Expr; else: Expr }
+  | { kind: "sequence"; first: Expr; then: Expr }
   | { kind: "call"; id: string; source: SourceLocation; callee: string; args: Expr[] };
 
 export type Predicate = { kind: "requires" | "ensures"; predicate: Expr; source: SourceLocation };
@@ -44,6 +45,7 @@ export type ProgramIR = {
 
 export function prettyExpr(expr: Expr): string {
   switch (expr.kind) {
+    case "sequence": return `(${prettyExpr(expr.first)}, ${prettyExpr(expr.then)})`;
     case "unsupported":
     case "opaque": return expr.text;
     case "bigint": return expr.value + "n";

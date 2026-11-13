@@ -27,6 +27,7 @@ export function callSites(fn: FunctionIR): CallSite[] {
     else if ((expr.kind === "unary" || expr.kind === "length")) visit(expr.operand);
     else if (expr.kind === "unsupported") expr.dependencies.forEach(visit);
     else if (expr.kind === "binary") { visit(expr.left); visit(expr.right); }
+    else if (expr.kind === "sequence") { visit(expr.first); visit(expr.then); }
     else if (expr.kind === "ternary") { visit(expr.condition); visit(expr.then); visit(expr.else); }
   }
   visit(fn.body);
@@ -49,6 +50,7 @@ export function createTestRuntime(input: string) {
       if (expr.kind === "opaque" || expr.kind === "unsupported") throw new Error("Unsupported expression: " + expr.text);
       if ((expr.kind === "unary" || expr.kind === "length")) supported(expr.operand);
       if (expr.kind === "binary") { supported(expr.left); supported(expr.right); }
+      if (expr.kind === "sequence") { supported(expr.first); supported(expr.then); }
       if (expr.kind === "ternary") { supported(expr.condition); supported(expr.then); supported(expr.else); }
       if (expr.kind === "call") expr.args.forEach(supported);
     }

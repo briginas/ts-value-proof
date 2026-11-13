@@ -9,6 +9,9 @@ export const not = (operand: Expr): Expr => ({ kind: "unary", op: "!", operand }
 /** Enumerate every lowered path, retaining the original call identity. */
 export function callPaths(body: Expr, path: Expr = truth): { call: Extract<Expr, {kind:"call"}>; path: Expr }[] {
   switch (body.kind) {
+    case "sequence":
+      // Evaluate initializers under the preceding path, before later guards.
+      return callPaths(body.then, and(path, { kind: "sequence", first: body.first, then: truth }));
     case "call": return [{ call: body, path }];
     case "ternary": return [...callPaths(body.then, and(path, body.condition)), ...callPaths(body.else, and(path, not(body.condition)))];
     case "binary": return [...callPaths(body.left, path), ...callPaths(body.right,
@@ -30,6 +33,7 @@ export function dependencies(program: ProgramIR) {
   function sort(value: string): void { if (value === "int" || value === "float64" || value === "string") sorts.add(value); }
   function visit(expr: Expr, env: Env, result?: () => void): void {
     switch (expr.kind) {
+      case "sequence": visit(expr.first, env, result); visit(expr.then, env, result); break;
       case "bigint": sort("int"); break;
       case "string": sort("string"); break;
       case "length": sort("float64"); visit(expr.operand, env, result); break;

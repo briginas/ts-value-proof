@@ -106,7 +106,16 @@ the static verifier does not execute the code.
   have no calls, mutations, or property access except primitive string `.length`.
   Existing type/model restrictions apply; missing return paths and labeled breaks
   are not supported.
-- Local variables, mutations, loops, recursion, `async`, generics, overloads,
+- Local `const` and `let` support plain names and required initializers, with or
+  without type annotations, including multiple declarations and block shadowing.
+  Values can be used in returns, conditions, and call arguments. Initializers
+  cannot contain calls or property access except primitive string `.length`.
+  Locals declared in a `switch` clause cannot be read from another clause.
+  When checking a result or a later call, preceding initializers are included
+  even if their values are unused: a later guard cannot protect earlier division.
+  Independent predicates that do not use the body retain selective checking.
+  See [the local variables example](../examples/local-variables.ts).
+- Mutations, `var`, destructuring, uninitialized locals, `using`, loops, recursion, `async`, generics, overloads,
   optional/rest/default parameters, and the ternary operator are not yet supported.
   Remainder, exponentiation, and other unsupported operations in a
   checked condition produce `unknown`.

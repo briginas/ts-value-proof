@@ -121,6 +121,9 @@ export async function verifyWithModel<V>(program: ProgramIR, ctx: NumericModel<V
     function evaluate(expr: Expr, bindings: Env, output?: () => V,
                       path = ctx.truth(true), allowCalls = false, pathExpr: Expr = truth): V {
       switch (expr.kind) {
+        case "sequence":
+          evaluate(expr.first, bindings, output, path, false, pathExpr);
+          return evaluate(expr.then, bindings, output, path, allowCalls, pathExpr);
         case "opaque":
         case "unsupported": throw new UnsupportedDependency(`Unsupported dependency: ${expr.text}`, expr.source);
         case "length":

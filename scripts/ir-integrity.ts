@@ -4,6 +4,7 @@ import type { Expr, ProgramIR, SourceLocation, ValueSort } from "./ir.ts";
 
 export type SourceStatement =
   | { kind: "return"; value: Expr }
+  | { kind: "evaluate"; value: Expr }
   | { kind: "block"; statements: SourceStatement[] }
   | { kind: "if"; condition: Expr; then: SourceStatement; else?: SourceStatement }
   | { kind: "switch"; value: Expr; clauses: { test?: Expr; body: SourceStatement }[] }
@@ -16,6 +17,7 @@ type BreakTarget = { continuation: Expr | undefined };
 export function returnExpression(statement: SourceStatement, continuation?: Expr, breakTarget?: BreakTarget): Expr | undefined {
   switch (statement.kind) {
     case "return": return statement.value;
+    case "evaluate": return continuation ? { kind: "sequence", first: statement.value, then: continuation } : undefined;
     case "block": {
       let result = continuation;
       for (let i = statement.statements.length - 1; i >= 0; i--)
@@ -108,6 +110,10 @@ export function validateIR(program: ProgramIR): void {
       const pure = (child: Expr) => expression(child, false, allowResult);
       const child = (value: Expr) => expression(value, allowCalls, allowResult);
       switch (expr.kind) {
+        case "sequence":
+          requireIR(allowCalls && !allowResult, "sequence outside function body");
+          pure(expr.first);
+          return child(expr.then);
         case "opaque": location(expr.source); requireIR(typeof expr.text === "string", "opaque description"); return "opaque";
         case "unsupported":
           location(expr.source);

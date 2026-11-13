@@ -200,30 +200,45 @@ export function prepareSource(fileName: string, onInput?: (file: string) => void
         dependencies: [expression(node.operand, allowed, calls)] };
     } else error(node, ts.SyntaxKind[node.kind]);
   }
-  function switchExpression(node: ts.Expression, allowed: ReadonlyMap<ts.Symbol, Expr>): Expr {
-    // Reusing the selector in equality terms must not duplicate calls or getters.
+  function pureBodyExpression(node: ts.Expression, allowed: ReadonlyMap<ts.Symbol, Expr>): Expr {
+    // Reusing selectors or local values must not duplicate calls or getters.
     function noGetter(part: ts.Node): void {
       if ((ts.isPropertyAccessExpression(part) || ts.isElementAccessExpression(part)) && !stringLength(part))
-        error(part, "property access in switch selection is unsupported");
+        error(part, "property access in switch selection or local initializers is unsupported");
       ts.forEachChild(part, noGetter);
     }
     noGetter(node);
     return expression(node, allowed, false);
   }
-  function statement(node: ts.Statement, allowed: ReadonlyMap<ts.Symbol, Expr>, calls: string[], inSwitch = false): SourceStatement {
-    if (ts.isBlock(node)) return { kind: "block", statements: node.statements.map(s => statement(s, allowed, calls, inSwitch)) };
-    else if (ts.isReturnStatement(node) && node.expression)
+  function statements(nodes: readonly ts.Statement[], allowed: ReadonlyMap<ts.Symbol, Expr>, calls: string[], inSwitch: boolean): SourceStatement {
+    const scope = new Map(allowed);
+    return { kind: "block", statements: nodes.map(node => statement(node, scope, calls, inSwitch)) };
+  }
+  function statement(node: ts.Statement, allowed: Map<ts.Symbol, Expr>, calls: string[], inSwitch = false): SourceStatement {
+    if (ts.isBlock(node)) return statements(node.statements, allowed, calls, inSwitch);
+    else if (ts.isVariableStatement(node)) {
+      const flags = node.declarationList.flags;
+      if (!(flags & (ts.NodeFlags.Const | ts.NodeFlags.Let)) || (flags & ts.NodeFlags.Using) || node.modifiers?.length)
+        error(node, "only local const/let declarations are supported");
+      return { kind: "block", statements: node.declarationList.declarations.map(declaration => {
+        if (!ts.isIdentifier(declaration.name) || !declaration.initializer || declaration.exclamationToken)
+          error(declaration, "local variables need a plain name and an initializer");
+        const value = pureBodyExpression(declaration.initializer, allowed);
+        allowed.set(symbol(declaration.name), value);
+        return { kind: "evaluate", value };
+      }) };
+    } else if (ts.isReturnStatement(node) && node.expression)
       return { kind: "return", value: expression(node.expression, allowed, calls) };
     else if (ts.isIfStatement(node)) {
       requireBoolean(node.expression);
       return { kind: "if", condition: expression(node.expression, allowed, false),
-        then: statement(node.thenStatement, allowed, calls, inSwitch),
-        else: node.elseStatement ? statement(node.elseStatement, allowed, calls, inSwitch) : undefined };
+        then: statement(node.thenStatement, new Map(allowed), calls, inSwitch),
+        else: node.elseStatement ? statement(node.elseStatement, new Map(allowed), calls, inSwitch) : undefined };
     } else if (ts.isSwitchStatement(node)) {
-      return { kind: "switch", value: switchExpression(node.expression, allowed),
+      return { kind: "switch", value: pureBodyExpression(node.expression, allowed),
         clauses: node.caseBlock.clauses.map(clause => ({
-          test: ts.isCaseClause(clause) ? switchExpression(clause.expression, allowed) : undefined,
-          body: { kind: "block", statements: clause.statements.map(s => statement(s, allowed, calls, true)) },
+          test: ts.isCaseClause(clause) ? pureBodyExpression(clause.expression, allowed) : undefined,
+          body: statements(clause.statements, allowed, calls, true),
         })) };
     } else if (ts.isBreakStatement(node) && !node.label && inSwitch) {
       return { kind: "break" };

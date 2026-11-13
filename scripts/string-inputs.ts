@@ -7,6 +7,7 @@ export function stringPool(fn: FunctionIR): string[] {
     if (expr.kind === "string") values.add(expr.value);
     else if (expr.kind === "unary" || expr.kind === "length") visit(expr.operand);
     else if (expr.kind === "binary") { visit(expr.left); visit(expr.right); }
+    else if (expr.kind === "sequence") { visit(expr.first); visit(expr.then); }
     else if (expr.kind === "ternary") { visit(expr.condition); visit(expr.then); visit(expr.else); }
     else if (expr.kind === "call") expr.args.forEach(visit);
   }
