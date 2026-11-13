@@ -21,7 +21,7 @@ try {
   fs.writeFileSync(path.join(consumer, "package.json"), '{"name":"proof-consumer","private":true,"type":"module"}');
   run("npm", ["install", tarball, "--ignore-scripts", "--no-audit", "--no-fund", "--omit=optional"]);
   fs.writeFileSync(path.join(consumer, "entry.ts"), `import { contract } from "ts-value-proof";
-export function increment(value: bigint): bigint { return value + 1n; }
+export function increment(value: bigint): bigint { let next = value; next += 1n; value = 0n; return next; }
 contract(increment, { ensures: (result, value) => result > value });\n`);
   run(process.execPath, ["--input-type=module", "-e", `
 import assert from 'node:assert/strict';

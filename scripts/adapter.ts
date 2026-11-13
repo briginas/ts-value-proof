@@ -204,7 +204,7 @@ export function prepareSource(fileName: string, onInput?: (file: string) => void
     // Reusing selectors or local values must not duplicate calls or getters.
     function noGetter(part: ts.Node): void {
       if ((ts.isPropertyAccessExpression(part) || ts.isElementAccessExpression(part)) && !stringLength(part))
-        error(part, "property access in switch selection or local initializers is unsupported");
+        error(part, "property access in switch selection, local initializers or assignments is unsupported");
       ts.forEachChild(part, noGetter);
     }
     noGetter(node);
@@ -224,9 +224,37 @@ export function prepareSource(fileName: string, onInput?: (file: string) => void
         if (!ts.isIdentifier(declaration.name) || !declaration.initializer || declaration.exclamationToken)
           error(declaration, "local variables need a plain name and an initializer");
         const value = pureBodyExpression(declaration.initializer, allowed);
-        allowed.set(symbol(declaration.name), value);
-        return { kind: "evaluate", value };
+        // A source-only name preserves snapshots and shadowing until the
+        // statements are lowered. ':' cannot occur in a TypeScript identifier.
+        const name = `local:${declaration.getStart()}`;
+        allowed.set(symbol(declaration.name), { kind: "ident", name });
+        return { kind: "bind", name, value };
       }) };
+    } else if (ts.isExpressionStatement(node)) {
+      let assignment = node.expression;
+      while (ts.isParenthesizedExpression(assignment)) assignment = assignment.expression;
+      if (!ts.isBinaryExpression(assignment) || !ts.isIdentifier(assignment.left) ||
+          !["=", "+=", "-=", "*=", "/="].includes(assignment.operatorToken.getText()))
+        error(node, "only standalone assignments to local let variables or parameters are supported");
+      const target = symbol(assignment.left);
+      const binding = allowed.get(target);
+      const mutable = target.declarations?.some(declaration => ts.isParameter(declaration) ||
+        (ts.isVariableDeclaration(declaration) && ts.isVariableDeclarationList(declaration.parent) &&
+          !!(declaration.parent.flags & ts.NodeFlags.Let)));
+      if (!mutable || binding?.kind !== "ident") error(assignment.left, "assignment target must be a local let variable or parameter");
+      const right = pureBodyExpression(assignment.right, allowed);
+      const operator = assignment.operatorToken.getText();
+      let value = right;
+      if (operator !== "=") {
+        const op = operator.slice(0, -1) as "+" | "-" | "*" | "/";
+        const leftSort = expressionSort(assignment.left), rightSort = expressionSort(assignment.right);
+        value = (leftSort === "string" || rightSort === "string") &&
+          !(op === "+" && leftSort === "string" && rightSort === "string")
+          ? { kind: "unsupported", text: assignment.getText(), sort: expressionSort(assignment),
+              source: location(assignment), dependencies: [binding, right] }
+          : { kind: "binary", op, left: binding, right };
+      }
+      return { kind: "bind", name: binding.name, value };
     } else if (ts.isReturnStatement(node) && node.expression)
       return { kind: "return", value: expression(node.expression, allowed, calls) };
     else if (ts.isIfStatement(node)) {

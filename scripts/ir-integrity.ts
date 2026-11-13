@@ -5,6 +5,7 @@ import type { Expr, ProgramIR, SourceLocation, ValueSort } from "./ir.ts";
 export type SourceStatement =
   | { kind: "return"; value: Expr }
   | { kind: "evaluate"; value: Expr }
+  | { kind: "bind"; name: string; value: Expr }
   | { kind: "block"; statements: SourceStatement[] }
   | { kind: "if"; condition: Expr; then: SourceStatement; else?: SourceStatement }
   | { kind: "switch"; value: Expr; clauses: { test?: Expr; body: SourceStatement }[] }
@@ -12,12 +13,31 @@ export type SourceStatement =
 
 type BreakTarget = { continuation: Expr | undefined };
 
+// Source bindings disappear before public IR validation. Substitute only in
+// the continuation: the RHS still reads the value before this assignment.
+function replaceBinding(expr: Expr, name: string, value: Expr): Expr {
+  const replace = (child: Expr) => replaceBinding(child, name, value);
+  switch (expr.kind) {
+    case "ident": return expr.name === name ? value : expr;
+    case "unary":
+    case "length": return { ...expr, operand: replace(expr.operand) };
+    case "binary": return { ...expr, left: replace(expr.left), right: replace(expr.right) };
+    case "sequence": return { ...expr, first: replace(expr.first), then: replace(expr.then) };
+    case "ternary": return { ...expr, condition: replace(expr.condition), then: replace(expr.then), else: replace(expr.else) };
+    case "call": return { ...expr, args: expr.args.map(replace) };
+    case "unsupported": return { ...expr, dependencies: expr.dependencies.map(replace) };
+    default: return expr;
+  }
+}
+
 // Both branches inherit the remaining statements; return ends its path.
 // Continuations can share a source call, whose ID survives this lowering.
 export function returnExpression(statement: SourceStatement, continuation?: Expr, breakTarget?: BreakTarget): Expr | undefined {
   switch (statement.kind) {
     case "return": return statement.value;
     case "evaluate": return continuation ? { kind: "sequence", first: statement.value, then: continuation } : undefined;
+    case "bind": return continuation ? { kind: "sequence", first: statement.value,
+      then: replaceBinding(continuation, statement.name, statement.value) } : undefined;
     case "block": {
       let result = continuation;
       for (let i = statement.statements.length - 1; i >= 0; i--)
@@ -165,7 +185,9 @@ export function validateIR(program: ProgramIR): void {
           const target = functions.get(expr.callee);
           requireIR(target && program.coverage.contracts.includes(expr.callee), "uncontracted call target");
           requireIR(expr.args.length === target.params.length && expr.args.every((arg, i) => { const sort = pure(arg); return target.params[i].sort === "opaque" || sort === target.params[i].sort; }), "call arguments");
-          const shape = JSON.stringify([fn.name, expr]);
+          // A shared source call can receive different values on different
+          // paths after assignments. Its source, owner and target stay fixed.
+          const shape = JSON.stringify([fn.name, expr.source, expr.callee, expr.args.length]);
           requireIR(!calls.has(expr.id) || calls.get(expr.id) === shape, "conflicting call identity");
           calls.set(expr.id, shape);
           targets.add(expr.callee);

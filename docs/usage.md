@@ -115,7 +115,15 @@ the static verifier does not execute the code.
   even if their values are unused: a later guard cannot protect earlier division.
   Independent predicates that do not use the body retain selective checking.
   See [the local variables example](../examples/local-variables.ts).
-- Mutations, `var`, destructuring, uninitialized locals, `using`, loops, recursion, `async`, generics, overloads,
+- Standalone `=`, `+=`, `-=`, `*=`, `/=` assignments support local `let` variables
+  and parameters, including in blocks, `if/else`, and `switch` with fallthrough and
+  `break`. String `+=` concatenates without coercion. The right-hand side has the
+  same restrictions as an initializer. Earlier local copies keep their values;
+  contract parameters always refer to the original inputs. Preceding assignments
+  remain checked even if overwritten, so a later guard cannot protect earlier
+  division by zero. See [the assignments example](../examples/assignments.ts).
+- Property/element writes, assignments inside expressions, `++`/`--`, other compound
+  assignments, `var`, destructuring, uninitialized locals, `using`, loops, recursion, `async`, generics, overloads,
   optional/rest/default parameters, and the ternary operator are not yet supported.
   Remainder, exponentiation, and other unsupported operations in a
   checked condition produce `unknown`.

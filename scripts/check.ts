@@ -411,8 +411,8 @@ try {
   passed("division is checked and remainder stays unknown; numeric mixing, truthiness, type errors and recursion are rejected");
 
   for (const [name, body] of [
-    ["variable-assignment", "let y = x; y = x + 1n; return y;"],
-    ["mutation", "x += 1n; return x;"],
+    ["nested-assignment", "let y = x; return y = x + 1n;"],
+    ["unsupported-assignment", "x %= 2n; return x;"],
     ["loop", "while (x < 0n) { x += 1n; } return x;"],
     ["try", "try { return x; } catch { return 0n; }"],
     ["ternary", "return x > 0n ? x : -x;"],

@@ -85,6 +85,16 @@ test("Vite verifies and executes functions with local declarations", async () =>
   expect((await execute(chunk.code)).f(12n)).toBe(26n);
 });
 
+test("Vite verifies assignments and preserves their executable behavior", async () => {
+  const { root, entry } = fixture("assignments", `export function f(x:bigint):bigint {
+    let y=x; if(y<0n)y=-y; switch(x){case 0n:y=1n;break;default:y+=1n;} x=0n;return y;
+  } contract(f,{ensures:(r,x)=>r>0n && (r===x+1n || r===1n-x)});`);
+  const chunk = await bundle(config(root, entry));
+  expect(chunk.code).not.toMatch(/contract|ensures/);
+  const { f } = await execute(chunk.code);
+  for (const x of [-12n,0n,12n]) expect(f(x)).toBe((x<0n?-x:x)+1n);
+});
+
 test("aliases, mixed imports, local exports and star re-exports retain working functions", async () => {
   const { root, entry, api } = fixture("barrels");
   fs.writeFileSync(path.join(root, "impl.ts"), "export function f(x: bigint): bigint { return x + 1n; }");
@@ -120,7 +130,7 @@ test.each([
   ["inconsistent", valid.replace("ensures:", "requires: x => x > 0n && x < 0n, ensures:"), /inconsistent/],
   ["unknown", valid.replace("x + 1n", "x % 2n"), /unknown/],
   ["types", valid.replace("return x + 1n", 'return "bad"'), /not assignable/],
-  ["syntax", valid.replace("return x + 1n", "let y = x; y += 1n; return y"), /Unsupported/],
+  ["syntax", valid.replace("return x + 1n", "let y = x; return y += 1n"), /Unsupported/],
   ["bound", valid.replace("contract(f,", "const bound = contract(f,"), /Unsupported/],
 ])("Vite rejects %s before emitting new output", async (name, body, error) => {
   const { root, entry } = fixture(name, body);

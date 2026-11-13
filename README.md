@@ -32,7 +32,10 @@ The verifier also finds counterexamples and generates regression and property-ba
   with fallthrough and unlabeled `break`.
 - **Local variables:** plain names, nested scopes, and shadowing; no calls in initializers.
   See [example](examples/local-variables.ts) and [full limits](docs/usage.md#limitations).
-- **Unsupported:** assignments, `var`, destructuring, loops,
+- **Assignments:** standalone `=`, `+=`, `-=`, `*=`, `/=` to local `let` variables
+  and parameters, including across branches; string `+=` is supported.
+  No calls on the right-hand side. See [example](examples/assignments.ts).
+- **Unsupported:** property writes, assignments inside expressions, `++`/`--`, other compound assignments, `var`, destructuring, loops,
   ternary expressions (`?:`), and `try/catch/finally`.
 
 **Value operations**
