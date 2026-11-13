@@ -91,7 +91,7 @@ assert.deepEqual(badCallee.results.map(r=>r.status),["satisfiable","disproved","
 const limited=await verify(fixture("limits",identity),{resourceLimit:1});
 assert.equal(limited.status,"unknown");
 assert(limited.results.some(r=>r.status==="unknown" && r.reasonCode==="solver-unknown" && r.reason));
-for(const op of ['*','/','%','**','|','==']) {
+for(const op of ['/','%','**','|','==']) {
   const file=fixture("operator-"+op.charCodeAt(0),identity.replace('return x;',op==='=='?'if(x==0)return 1;return 0;':`return x ${op} 1;`));
   assert.equal((await verify(file)).status,"unknown");
 }
@@ -125,7 +125,7 @@ assert.equal(nextNumber(0.1,-1),0.09999999999999999);
 const pool=numberPool(adapt(fixture("pool",identity.replace('x=>x===x','x=>x===0.1'))).functions[0]);
 for(const value of [0,-0,NaN,Infinity,-Infinity,0.1,nextNumber(0.1,1),nextNumber(0.1,-1)])
   assert(pool.some(n=>Object.is(n,value)));
-for (const [file,code] of [[mixed,2],[path.join(directory,'operator-42.ts'),2],['examples/number-identity.ts',0]] as const) {
+for (const [file,code] of [[mixed,2],[path.join(directory,'operator-47.ts'),2],['examples/number-identity.ts',0]] as const) {
   const run=spawnSync(process.execPath,['scripts/verify.ts',file],{encoding:'utf8',timeout:20000});
   assert.equal(run.status,code,run.stdout+run.stderr);
   assert.deepEqual(JSON.parse(run.stdout),JSON.parse(fs.readFileSync('work/verification.json','utf8')));

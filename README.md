@@ -35,9 +35,9 @@ The verifier also finds counterexamples and generates regression and property-ba
 
 **Value operations**
 
-- **`bigint` / `number`:** addition (`+`), subtraction (`-`), unary minus (`-x`), and comparisons.
+- **`bigint` / `number`:** addition (`+`), subtraction (`-`), multiplication (`*`), unary minus (`-x`), and comparisons.
 - **UTF-16 strings:** concatenation (`+`), strict equality (`===`), strict inequality (`!==`), and `.length`.
-- **Unsupported arithmetic:** multiplication (`*`) and division (`/`).
+- **Unsupported arithmetic:** division (`/`), remainder (`%`), and exponentiation (`**`).
 
 ## Try it
 

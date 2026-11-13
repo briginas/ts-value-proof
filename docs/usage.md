@@ -47,6 +47,7 @@ npm run verify -- examples/string-basics.ts   # verified, exit 0
 The errors in `withdraw-number.ts` involve NaN and Infinity.
 Other examples: [contracts across modules](../examples/modules/index.ts),
 [requires-only contracts](../examples/selective-requires.ts),
+[multiplication](../examples/multiplication.ts),
 and [selective verification](../examples/selective-mixed.ts).
 
 The CLI prints JSON and saves the same report to `work/verification.json`.
@@ -97,7 +98,7 @@ the static verifier does not execute the code.
   `@ts-expect-error` directives are not allowed.
 - Supported constructs include named synchronous functions with explicit types
   for required parameters and the return value; `return`, `if/else`, blocks, `switch`;
-  `+`, `-`, unary minus, comparisons, `===`, `!==`, `&&`, `||`, and `!`.
+  `+`, `-`, `*`, unary minus, comparisons, `===`, `!==`, `&&`, `||`, and `!`.
 - `switch` supports `case`, `default` in any position, fallthrough, nested switches,
   and unlabeled `break`, including inside `if`. Selection uses strict equality:
   `NaN` never matches and `+0` matches `-0`. Selectors and case expressions must
@@ -106,8 +107,8 @@ the static verifier does not execute the code.
   are not supported.
 - Local variables, mutations, loops, recursion, `async`, generics, overloads,
   optional/rest/default parameters, and the ternary operator are not yet supported.
-  Multiplication, division, and other unsupported operations in a checked condition
-  produce `unknown`.
+  Division, remainder, exponentiation, and other unsupported operations in a
+  checked condition produce `unknown`.
 - A contract must be an inline object with expression-bodied arrow predicates.
   Only one contract per function is allowed. Calls are allowed within return
   expressions; the called function must have a contract. Calls in `if` conditions,
@@ -137,7 +138,8 @@ the static verifier does not execute the code.
   `unknown`; this limit does not restrict the scope of the proof.
 - A weak postcondition on a called function may produce `unknown`; an abstract
   model found by the solver is not treated as a confirmed error. Each Z3 query
-  has a default timeout of 5 seconds.
+  has a default timeout of 5 seconds. Nonlinear multiplication constraints can
+  reach this limit and return `unknown`; supporting `*` does not guarantee a proof.
 
 Proofs assume that actual arguments match their declared TypeScript types.
 The project supports a limited subset of the language; tests are not a formal

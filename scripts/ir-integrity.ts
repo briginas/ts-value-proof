@@ -143,8 +143,8 @@ export function validateIR(program: ProgramIR): void {
             requireIR(expr.op === "+" && left === "string" && right === "string", "string concatenation operands");
             return "string";
           }
-          requireIR(["+", "-", "<", "<=", ">", ">="].includes(expr.op) && ["int", "float64", "opaque"].includes(left), "numeric operator/operands");
-          return expr.op === "+" || expr.op === "-" ? left : "bool";
+          requireIR(["+", "-", "*", "<", "<=", ">", ">="].includes(expr.op) && ["int", "float64", "opaque"].includes(left), "numeric operator/operands");
+          return expr.op === "+" || expr.op === "-" || expr.op === "*" ? left : "bool";
         }
         case "ternary": {
           requireIR(allowCalls && !allowResult, "branch outside function body");

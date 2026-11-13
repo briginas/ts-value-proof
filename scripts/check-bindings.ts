@@ -176,7 +176,7 @@ export async function checkBindings(): Promise<Array<VerificationReport & { test
     "second.ts": identity,
   }, /contracted functions/);
   assert.equal((await checked("unsupported-imported-body", {
-    ...modules, "impl.ts": modules["impl.ts"].replace("return x;", "return x * x;"),
+    ...modules, "impl.ts": modules["impl.ts"].replace("return x;", "return x / x;"),
   })).status, "unknown");
   rejected("suppressed-imported-types", {
     ...modules, "impl.ts": "// @ts-nocheck\n" + modules["impl.ts"],

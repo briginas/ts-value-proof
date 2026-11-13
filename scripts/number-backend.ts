@@ -100,6 +100,7 @@ export async function withNumberModel<T>(run: (model: NumericModel<Term> & {
         return term(z.mk_fpa_add(c,rne,a.ast,b.ast),"number");
       },
       sub: binary((a,b) => z.mk_fpa_sub(c,rne,a,b), "number"),
+      mul: binary((a,b) => z.mk_fpa_mul(c,rne,a,b), "number"),
       lt: compare((a,b) => z.mk_lt(c,a,b), (a,b) => z.mk_fpa_lt(c,a,b)),
       le: compare((a,b) => z.mk_le(c,a,b), (a,b) => z.mk_fpa_leq(c,a,b)),
       gt: compare((a,b) => z.mk_gt(c,a,b), (a,b) => z.mk_fpa_gt(c,a,b)),

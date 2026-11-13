@@ -144,6 +144,7 @@ try {
     const a = values[i], b = values[(i + 1) % values.length];
     examples.push(["(" + a + "n) + (" + b + "n)", a + b]);
     examples.push(["(" + a + "n) - (" + b + "n)", a - b]);
+    examples.push(["(" + a + "n) * (" + b + "n)", a * b]);
     examples.push(["-((" + a + "n) - (" + b + "n))", -(a - b)]);
   }
   let differentialSource = prefix;

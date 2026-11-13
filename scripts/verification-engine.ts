@@ -16,6 +16,7 @@ export type NumericModel<V> = {
   neg(value: V): V;
   add(left: V, right: V): V;
   sub(left: V, right: V): V;
+  mul(left: V, right: V): V;
   lt(left: V, right: V): V;
   le(left: V, right: V): V;
   gt(left: V, right: V): V;
@@ -151,6 +152,7 @@ export async function verifyWithModel<V>(program: ProgramIR, ctx: NumericModel<V
           switch (expr.op) {
             case "+": return ctx.add(left, right);
             case "-": return ctx.sub(numeric(left), numeric(right));
+            case "*": return ctx.mul(numeric(left), numeric(right));
             case "<": return ctx.lt(numeric(left), numeric(right));
             case "<=": return ctx.le(numeric(left), numeric(right));
             case ">": return ctx.gt(numeric(left), numeric(right));

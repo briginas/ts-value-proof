@@ -24,6 +24,7 @@ export async function verifyIntegers(program: ProgramIR, limits: SolverLimits = 
     variable: name => ctx.Int.const(name), truth: value => ctx.Bool.val(value),
     neg: value => numeric(value).neg(),
     add: (a,b) => numeric(a).add(numeric(b)), sub: (a,b) => numeric(a).sub(numeric(b)),
+    mul: (a,b) => numeric(a).mul(numeric(b)),
     lt: (a,b) => numeric(a).lt(numeric(b)), le: (a,b) => numeric(a).le(numeric(b)),
     gt: (a,b) => numeric(a).gt(numeric(b)), ge: (a,b) => numeric(a).ge(numeric(b)),
     eq: (a,b) => ctx.isBool(a) ? a.eq(boolean(b)) : numeric(a).eq(numeric(b)),

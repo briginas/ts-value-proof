@@ -50,6 +50,7 @@ await withNumberModel(async m => {
     for (const b of corpus) {
       assert(Object.is(await m.read(m.add(lit(a),lit(b))),a+b));
       assert(Object.is(await m.read(m.sub(lit(a),lit(b))),a-b));
+      assert(Object.is(await m.read(m.mul(lit(a),lit(b))),a*b));
       for (const [term, expected] of [[m.eq(lit(a),lit(b)),a===b], [m.lt(lit(a),lit(b)),a<b],
         [m.le(lit(a),lit(b)),a<=b], [m.gt(lit(a),lit(b)),a>b], [m.ge(lit(a),lit(b)),a>=b],
         [m.Not(m.eq(lit(a),lit(b))),a!==b]] as const) assert.equal(await m.read(term), expected);
@@ -65,6 +66,9 @@ await withNumberModel(async m => {
   // Half an ULP: even mantissa rounds down, odd mantissa rounds up.
   for (const a of [1,1+Number.EPSILON])
     assert(Object.is(await m.read(m.add(lit(a),lit(Number.EPSILON/2))),a+Number.EPSILON/2));
+  // Halfway subnormal products round to the even significand (including zero).
+  for (const a of [Number.MIN_VALUE, 3 * Number.MIN_VALUE, -Number.MIN_VALUE, -3 * Number.MIN_VALUE])
+    assert(Object.is(await m.read(m.mul(lit(a),lit(0.5))),a*0.5));
   const x = m.variable("__proto__");
   for (const expected of [NaN,Infinity,-Infinity,-0,0,Number.MIN_VALUE,Number.MAX_VALUE,2**53]) {
     const r = await m.solve([m.sameTerm(x,lit(expected))],new Map([["__proto__",x]]),{});
@@ -91,5 +95,5 @@ await withNumberModel(async m => {
 await assert.rejects(() => withNumberModel(async () => { throw new Error("injected failure"); }),/injected failure/);
 for (let i=0;i<3;i++) assert.equal((await verifyNumbers(ir)).find(r=>r.kind==="implementation")?.status,"proved");
 await assert.rejects(() => verifyNumbers(ir,{timeoutMs:0}),/limits/);
-console.log("Binary64: 595 arithmetic, 1734 comparisons, 289 ite, ties-to-even, models, limits and lifecycle passed");
+console.log("Binary64: arithmetic including multiplication, comparisons, ite, ties-to-even, models, limits and lifecycle passed");
 process.exit(0);
