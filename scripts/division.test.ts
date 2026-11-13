@@ -175,11 +175,11 @@ test("incorrect quotients produce exact replayable regressions", async () => {
     ["bigint", `function f(x:bigint):bigint{return x/3n;}
 contract(f,{requires:x=>x===-900719925474099312345n,ensures:r=>r===0n});`],
     ["number", `function f(x:number):number{return x/x;}
-contract(f,{ensures:r=>r===1});`],
+contract(f,{requires:x=>x===0,ensures:r=>r===1});`],
   ]) {
     const entry = fixture("regression-"+name, source);
     const report = await verify(entry);
-    expect(report.status).toBe("refuted");
+    expect(report.status, `${name}: ${JSON.stringify(report)}`).toBe("refuted");
     const generated = await generateRegressions(entry, path.join(path.dirname(entry), "generated"));
     const { manifest } = loadRegressions(generated.manifestFile);
     expect(manifest.cases).toHaveLength(1);
