@@ -68,10 +68,12 @@ contract(text,{ensures:r=>true?r===r:false});`);
   expect(report.results.find(r => r.function === "text")).toMatchObject({ status: "proved" });
 });
 
+const chooseSource = "function choose(x:number):number{return x!==x?NaN:x===0?-0:x;}";
+
 test("number and string ternaries preserve NaN, signed zero and UTF-16", async () => {
   const entry = fixture("scalars", `
-function choose(x:number):number{return x!==x?NaN:x===0?-0:x;}
-contract(choose,{ensures:(r,x)=>x!==x?r!==r:x===0?1/r===-Infinity:r===x});
+${chooseSource}
+contract(choose,{ensures:(r,x)=>x!==x?r!==r:r===x});
 function text(s:string):string{return s===""?"\\ud800":s==="😀"?s+"!":s;}
 contract(text,{ensures:(r,s)=>r===(s===""?"\\ud800":s==="😀"?s+"!":s)});
 function size(s:string):number{return (s===""?"😀":s).length;}
@@ -87,6 +89,34 @@ contract(literalSize,{ensures:r=>r>=1 && r<=2});`);
     expect(runtime.execute("text", [s]).result).toBe(s === "" ? "\ud800" : s === "😀" ? s + "!" : s);
   for (const s of ["", "abc"]) expect(runtime.execute("size", [s]).result).toBe(s === "" ? 2 : s.length);
   for (const x of [NaN, -1, 0, 1]) expect(runtime.execute("literalSize", [x]).result).toBe(x > 0 ? 1 : 2);
+});
+
+test("nested number ternaries prove negative zero and reject a positive-zero mutation", async () => {
+  // Together with the unrestricted NaN/equality proof above, this checks the
+  // original property for every number. Restrict reciprocal division to both
+  // zero inputs so Z3 need not bit-blast division over an unrestricted ternary.
+  const contract = "contract(choose,{requires:x=>x===0,ensures:r=>1/r===-Infinity});";
+  const entry = fixture("signed-zero", `${chooseSource}\n${contract}`);
+  const report = await verify(entry);
+  expect(report.status, JSON.stringify(report)).toBe("verified");
+  const runtime = createTestRuntime(entry);
+  for (const x of [0, -0]) {
+    expect(runtime.accepts("choose", [x])).toBe(true);
+    const execution = runtime.execute("choose", [x]);
+    expect(Object.is(execution.result, -0)).toBe(true);
+    expect(execution.ensures).toBe(true);
+  }
+
+  const broken = fixture("signed-zero-mutated", `${chooseSource.replace("?-0:", "?0:")}\n${contract}`);
+  const refuted = await verify(broken);
+  expect(refuted.status, JSON.stringify(refuted)).toBe("refuted");
+  expect(refuted.results.find(r => r.kind === "implementation")).toMatchObject({
+    status: "disproved", reasonCode: "contract-violation", counterexample: { x: expect.anything() },
+  });
+  const generated = await generateRegressions(broken, path.join(path.dirname(broken), "generated"));
+  const { manifest } = loadRegressions(generated.manifestFile);
+  expect(manifest.cases).toHaveLength(1);
+  expect(replayRegression(createTestRuntime(broken), broken, manifest.cases[0]).status).toBe("failed");
 });
 
 test("ternary obligations preserve solver resource limits", async () => {
