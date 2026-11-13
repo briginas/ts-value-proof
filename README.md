@@ -1,21 +1,13 @@
 # ts-value-proof
 
-TypeScript statically checks types. **ts-value-proof adds a layer of static checking
-for properties of values.** A function's return type can tell you that its result is
-a `bigint`; a value contract can additionally require that the result is greater
-than the input—and have that property checked before your code runs.
-
-You describe valid inputs with `requires` and expected results with `ensures`.
-This experimental verifier uses Z3 to attempt a mathematical proof that those
-conditions hold for all inputs satisfying the preconditions, within its supported
-model, without executing your code.
-
-For example:
+**Verify constraints on argument and return values in TypeScript.** Define allowed
+inputs and conditions the result must satisfy. Z3 proves those conditions hold for
+every allowed input—without running your code.
+This experimental verifier works within a limited set of supported operations and value models.
 
 ```ts
 import { contract } from "../src/contract.ts"; // ts-value-proof API, from examples/
 
-// TypeScript checks the return type.
 function increment(value: bigint): bigint {
   return value + 1n; // Try - 1n: types pass, contract fails.
 }
@@ -28,9 +20,20 @@ contract(increment, {
 
 [Runnable example](examples/bigint-exact.ts).
 
-It also finds counterexamples and generates regression and property-based tests.
+`requires` defines valid inputs; `ensures` defines expected results. Here, the
+contract proves that the result is greater than the input for every `bigint`.
+The verifier also finds counterexamples and generates regression and property-based tests.
 
 🔴 **Limited support:**
+
+**Code structure**
+
+- **Supported:** `return`, `if/else`, blocks, and `switch`
+  with fallthrough and unlabeled `break`.
+- **Unsupported:** local variables, assignments, loops,
+  ternary expressions (`?:`), and `try/catch/finally`.
+
+**Value operations**
 
 - **`bigint` / `number`:** addition (`+`), subtraction (`-`), unary minus (`-x`), and comparisons.
 - **UTF-16 strings:** concatenation (`+`), strict equality (`===`), strict inequality (`!==`), and `.length`.
