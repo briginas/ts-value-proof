@@ -402,12 +402,13 @@ try {
   assert.equal((await verify("examples/withdraw-number.ts")).status, "refuted");
   passed("number cannot silently fall back to mathematical reals");
 
-  assert.equal(implementation(await verify(fixture("division", source.replace("return balance - amount;", "return balance / amount;"))))?.status, "unknown");
+  assert.equal(implementation(await verify(fixture("division", source.replace("return balance - amount;", "return balance / amount;"))))?.status, "disproved");
+  assert.equal(implementation(await verify(fixture("remainder", source.replace("return balance - amount;", "return balance % amount;"))))?.status, "unknown");
   assert.throws(() => adapt(fixture("mixed", source.replace("balance >= 0n", "balance >= 0"))), /mixed numeric/);
   assert.throws(() => adapt(fixture("type-error", source.replace("result >= 0n", 'result.toUpperCase() === "0"'))), /toUpperCase/);
   assert.throws(() => adapt(fixture("recursive", source.replace("return balance - amount;", "return withdraw(balance, amount);"))), /recursive/);
   assert.throws(() => adapt(fixture("truthiness", source.replace("if (balance < 0n || amount <= 0n)", "if (balance)"))), /boolean/);
-  passed("unsupported division stays unknown; numeric mixing, truthiness, type errors and recursion are rejected");
+  passed("division is checked and remainder stays unknown; numeric mixing, truthiness, type errors and recursion are rejected");
 
   for (const [name, body] of [
     ["variable", "const y = x; return y;"],

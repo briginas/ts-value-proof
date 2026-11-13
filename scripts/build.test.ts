@@ -109,7 +109,7 @@ test("externalizing the contract API cannot bypass the scope error", async () =>
 test.each([
   ["refuted", valid.replace("r > x", "r < x"), /refuted/],
   ["inconsistent", valid.replace("ensures:", "requires: x => x > 0n && x < 0n, ensures:"), /inconsistent/],
-  ["unknown", valid.replace("x + 1n", "x / 2n"), /unknown/],
+  ["unknown", valid.replace("x + 1n", "x % 2n"), /unknown/],
   ["types", valid.replace("return x + 1n", 'return "bad"'), /not assignable/],
   ["syntax", valid.replace("return x + 1n", "const y = x + 1n; return y"), /Unsupported/],
   ["bound", valid.replace("contract(f,", "const bound = contract(f,"), /Unsupported/],

@@ -17,6 +17,7 @@ export type NumericModel<V> = {
   add(left: V, right: V): V;
   sub(left: V, right: V): V;
   mul(left: V, right: V): V;
+  div(left: V, right: V): V;
   lt(left: V, right: V): V;
   le(left: V, right: V): V;
   gt(left: V, right: V): V;
@@ -113,6 +114,7 @@ export async function verifyWithModel<V>(program: ProgramIR, ctx: NumericModel<V
       return variables.get(p.name)!;
     }]));
     const facts: V[] = [];
+    const divisions: { goal: V; facts: V[]; expression: string }[] = [];
     let abstractCalls = false;
     let pre: V[] = [];
 
@@ -153,6 +155,13 @@ export async function verifyWithModel<V>(program: ProgramIR, ctx: NumericModel<V
             case "+": return ctx.add(left, right);
             case "-": return ctx.sub(numeric(left), numeric(right));
             case "*": return ctx.mul(numeric(left), numeric(right));
+            case "/": {
+              if (ctx.sort === "int") divisions.push({
+                goal: ctx.Implies(path, ctx.Not(ctx.eq(right, ctx.literal({ kind: "bigint", value: "0" })))),
+                facts: [...facts], expression: prettyExpr(expr),
+              });
+              return ctx.div(numeric(left), numeric(right));
+            }
             case "<": return ctx.lt(numeric(left), numeric(right));
             case "<=": return ctx.le(numeric(left), numeric(right));
             case ">": return ctx.gt(numeric(left), numeric(right));
@@ -168,7 +177,7 @@ export async function verifyWithModel<V>(program: ProgramIR, ctx: NumericModel<V
           }
         }
         case "ternary": {
-          const condition = bool(evaluate(expr.condition, bindings, output, path, false));
+          const condition = bool(evaluate(expr.condition, bindings, output, path, false, pathExpr));
           const yes = evaluate(expr.then, bindings, output, ctx.And(path, condition), allowCalls, and(pathExpr, expr.condition));
           const no = evaluate(expr.else, bindings, output, ctx.And(path, ctx.Not(condition)), allowCalls, and(pathExpr, not(expr.condition)));
           return ctx.If(condition, yes, no);
@@ -178,16 +187,27 @@ export async function verifyWithModel<V>(program: ProgramIR, ctx: NumericModel<V
           const callee = functions.get(expr.callee)!;
           if (!supports(callee.returnSort))
             throw new UnsupportedDependency("Unsupported callee result: " + callee.sourceName, expr.source);
-          const callEnv: Env = new Map(callee.params.map((p, i) => [p.name, () => evaluate(expr.args[i], bindings)]));
+          const callEnv: Env = new Map(callee.params.map((p, i) => [p.name, () => evaluate(expr.args[i], bindings, undefined, path)]));
           // An untranslatable requires must never authorize using a guarantee.
-          for (const requirement of predicates(callee, "requires")) evaluate(requirement, callEnv);
+          for (const requirement of predicates(callee, "requires")) evaluate(requirement, callEnv, undefined, path);
           const result = ctx.variable(name + "::call::" + fresh++, callee.returnSort);
           abstractCalls = true;
           for (const guarantee of predicates(callee, "ensures"))
-            facts.push(ctx.Implies(path, bool(evaluate(guarantee, callEnv, () => result))));
+            facts.push(ctx.Implies(path, bool(evaluate(guarantee, callEnv, () => result, path))));
           return result;
         }
         default: throw new Error("Unsupported IR expression");
+      }
+    }
+
+    async function checkDivisions(assumptions: V[]): Promise<(Extract<ProofResult, { status: "unknown" }> & { reasonCode: "solver-unknown" | "unsupported-dependency" }) | undefined> {
+      for (const division of divisions) {
+        // Only earlier facts may justify definedness, never the predicate whose
+        // translation introduced this division (or a later callee guarantee).
+        const answer = await ctx.solve([...assumptions, ...division.facts, ctx.Not(division.goal)], new Map(), limits);
+        if (answer.status === "unknown") return { status: "unknown", reasonCode: "solver-unknown", reason: answer.reason };
+        if (answer.status === "sat") return { status: "unknown", reasonCode: "unsupported-dependency",
+          reason: `Bigint division may have a zero divisor: ${division.expression}`, dependencySource: ir.source };
       }
     }
 
@@ -200,12 +220,19 @@ export async function verifyWithModel<V>(program: ProgramIR, ctx: NumericModel<V
         condition: prettyExpr(requirements.reduce((expr, p) => and(expr, p.predicate), truth)) };
       try {
         pre = predicates(ir, "requires").map(p => bool(evaluate(p, env)));
-        const consistency = await ctx.solve(pre, new Map(), limits);
-        inconsistent = consistency.status === "unsat";
-        if (consistency.status === "unknown") preFailure = { status: "unknown", reasonCode: "solver-unknown", reason: consistency.reason };
-        results.push({ ...base, status: consistency.status === "sat" ? "satisfiable" : inconsistent ? "inconsistent" : "unknown",
-          ...(consistency.status === "unknown" ? { reasonCode: "solver-unknown" as const, reason: consistency.reason }
-            : inconsistent ? { reasonCode: "inconsistent-contract" as const, reason: "Preconditions are contradictory; no inputs satisfy this contract" } : {}) });
+        // Assuming requires here would silently discard inputs on which it throws.
+        const divisionFailure = await checkDivisions([]);
+        if (divisionFailure) {
+          preFailure = divisionFailure;
+          results.push({ ...base, ...divisionFailure });
+        } else {
+          const consistency = await ctx.solve(pre, new Map(), limits);
+          inconsistent = consistency.status === "unsat";
+          if (consistency.status === "unknown") preFailure = { status: "unknown", reasonCode: "solver-unknown", reason: consistency.reason };
+          results.push({ ...base, status: consistency.status === "sat" ? "satisfiable" : inconsistent ? "inconsistent" : "unknown",
+            ...(consistency.status === "unknown" ? { reasonCode: "solver-unknown" as const, reason: consistency.reason }
+              : inconsistent ? { reasonCode: "inconsistent-contract" as const, reason: "Preconditions are contradictory; no inputs satisfy this contract" } : {}) });
+        }
       } catch (error) {
         const failure = unsupportedResult(error);
         if (failure.status !== "unknown" || failure.reasonCode !== "unsupported-dependency") throw error;
@@ -217,11 +244,21 @@ export async function verifyWithModel<V>(program: ProgramIR, ctx: NumericModel<V
     async function check(obligation: Obligation, goal: () => V, path?: Expr): Promise<void> {
       if (preFailure) { results.push({ ...obligation, ...preFailure }); return; }
       facts.length = 0;
+      divisions.length = 0;
       abstractCalls = false;
       try {
         const assumptions = [...pre];
-        if (path) assumptions.push(bool(evaluate(path, env)));
+        if (path) {
+          const condition = bool(evaluate(path, env));
+          // A path condition cannot justify the divisions used to evaluate itself.
+          const failure = await checkDivisions(assumptions);
+          if (failure) { results.push({ ...obligation, ...failure }); return; }
+          divisions.length = 0;
+          assumptions.push(condition);
+        }
         const value = bool(goal());
+        const failure = await checkDivisions(assumptions);
+        if (failure) { results.push({ ...obligation, ...failure }); return; }
         const task: Pending<V> = { obligation, assumptions: [...assumptions, ...facts], goal: value, variables,
           abstractCalls, incomplete: incomplete ? incomplete.source ?? ir.source : undefined, defaults };
         results.push({ ...obligation, ...await prove(ctx, task, limits) });

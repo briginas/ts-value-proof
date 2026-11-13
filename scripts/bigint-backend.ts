@@ -25,6 +25,15 @@ export async function verifyIntegers(program: ProgramIR, limits: SolverLimits = 
     neg: value => numeric(value).neg(),
     add: (a,b) => numeric(a).add(numeric(b)), sub: (a,b) => numeric(a).sub(numeric(b)),
     mul: (a,b) => numeric(a).mul(numeric(b)),
+    div(a,b) {
+      const left = numeric(a), right = numeric(b);
+      const negativeLeft = left.lt(0), negativeRight = right.lt(0);
+      // SMT div is Euclidean. Divide magnitudes, then restore JS's sign.
+      // The shared engine proves the divisor nonzero before using this term.
+      const magnitude = ctx.If(negativeLeft, left.neg(), left)
+        .div(ctx.If(negativeRight, right.neg(), right));
+      return ctx.If(negativeLeft.eq(negativeRight), magnitude, magnitude.neg());
+    },
     lt: (a,b) => numeric(a).lt(numeric(b)), le: (a,b) => numeric(a).le(numeric(b)),
     gt: (a,b) => numeric(a).gt(numeric(b)), ge: (a,b) => numeric(a).ge(numeric(b)),
     eq: (a,b) => ctx.isBool(a) ? a.eq(boolean(b)) : numeric(a).eq(numeric(b)),

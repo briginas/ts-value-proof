@@ -12,7 +12,7 @@ export class UnsupportedNumericModel extends InputDiagnostic {
   }
 }
 
-const operators = new Set(["+", "-", "*", "<", "<=", ">", ">=", "===", "!==", "&&", "||"]);
+const operators = new Set(["+", "-", "*", "/", "<", "<=", ">", ">=", "===", "!==", "&&", "||"]);
 
 type Predicate = ts.ArrowFunction & { body: ts.Expression };
 type ParsedContract = { fn: SourceFunction; predicates: Map<string, Predicate> };
@@ -192,7 +192,7 @@ export function prepareSource(fileName: string, onInput?: (file: string) => void
         dependencies: [expression(node.expression, allowed, false),
           ...(ts.isElementAccessExpression(node) ? [expression(node.argumentExpression, allowed, false)] : [])] };
     } else if (ts.isBinaryExpression(node) &&
-        ["/", "%", "**", "==", "!=", "&", "|", "^", "<<", ">>", ">>>"].includes(node.operatorToken.getText())) {
+        ["%", "**", "==", "!=", "&", "|", "^", "<<", ">>", ">>>"].includes(node.operatorToken.getText())) {
       return { kind: "unsupported", text: node.getText(), sort: expressionSort(node), source: location(node),
         dependencies: [expression(node.left, allowed, calls), expression(node.right, allowed, calls)] };
     } else if (ts.isPrefixUnaryExpression(node) && [ts.SyntaxKind.PlusToken, ts.SyntaxKind.TildeToken].includes(node.operator)) {

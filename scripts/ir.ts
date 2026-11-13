@@ -22,7 +22,7 @@ export type Expr =
   | { kind: "ident"; name: string }
   | { kind: "result" }
   | { kind: "unary"; op: "-" | "!"; operand: Expr }
-  | { kind: "binary"; op: "+" | "-" | "*" | "<" | "<=" | ">" | ">=" | "===" | "!==" | "&&" | "||"; left: Expr; right: Expr }
+  | { kind: "binary"; op: "+" | "-" | "*" | "/" | "<" | "<=" | ">" | ">=" | "===" | "!==" | "&&" | "||"; left: Expr; right: Expr }
   | { kind: "ternary"; condition: Expr; then: Expr; else: Expr }
   | { kind: "call"; id: string; source: SourceLocation; callee: string; args: Expr[] };
 

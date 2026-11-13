@@ -48,6 +48,7 @@ The errors in `withdraw-number.ts` involve NaN and Infinity.
 Other examples: [contracts across modules](../examples/modules/index.ts),
 [requires-only contracts](../examples/selective-requires.ts),
 [multiplication](../examples/multiplication.ts),
+[bigint division](../examples/division.ts), [number division](../examples/division-number.ts),
 and [selective verification](../examples/selective-mixed.ts).
 
 The CLI prints JSON and saves the same report to `work/verification.json`.
@@ -98,7 +99,7 @@ the static verifier does not execute the code.
   `@ts-expect-error` directives are not allowed.
 - Supported constructs include named synchronous functions with explicit types
   for required parameters and the return value; `return`, `if/else`, blocks, `switch`;
-  `+`, `-`, `*`, unary minus, comparisons, `===`, `!==`, `&&`, `||`, and `!`.
+  `+`, `-`, `*`, `/`, unary minus, comparisons, `===`, `!==`, `&&`, `||`, and `!`.
 - `switch` supports `case`, `default` in any position, fallthrough, nested switches,
   and unlabeled `break`, including inside `if`. Selection uses strict equality:
   `NaN` never matches and `+0` matches `-0`. Selectors and case expressions must
@@ -107,7 +108,7 @@ the static verifier does not execute the code.
   are not supported.
 - Local variables, mutations, loops, recursion, `async`, generics, overloads,
   optional/rest/default parameters, and the ternary operator are not yet supported.
-  Division, remainder, exponentiation, and other unsupported operations in a
+  Remainder, exponentiation, and other unsupported operations in a
   checked condition produce `unknown`.
 - A contract must be an inline object with expression-bodied arrow predicates.
   Only one contract per function is allowed. Calls are allowed within return
@@ -128,6 +129,15 @@ the static verifier does not execute the code.
   `"😀".length === 2`. Indexing, string methods, regular expressions, `<`/`>`
   comparisons, and implicit conversions are not yet supported. Signatures must
   use `string`, without literal types or unions.
+- `bigint` division discards the fractional part: `-7n / 3n === -2n`.
+  A divisor must be nonzero on each evaluated path in the checked dependencies.
+  Use `requires: (x, y) => y !== 0n` or guard the division with a branch or
+  short-circuit expression. A potentially zero divisor produces
+  `unknown/unsupported-dependency`; solver limits produce `unknown/solver-unknown`.
+  In `requires`, put the guard before division: `y !== 0n && x / y > 0n`.
+  Verification remains selective; this is not an exception-safety check of unused code.
+- `number` division uses binary64 rounding: `1 / 0 === Infinity`,
+  `1 / -0 === -Infinity`, and `0 / 0` is `NaN`. No nonzero guard is required.
 - `number` includes NaN, Infinity, and both signs of zero. If inputs need
   restrictions, specify them in `requires`. In JSON, a `bigint` is stored as a
   string such as `"123n"`, and a `number` as an object with exact bits or a NaN marker.
@@ -138,8 +148,8 @@ the static verifier does not execute the code.
   `unknown`; this limit does not restrict the scope of the proof.
 - A weak postcondition on a called function may produce `unknown`; an abstract
   model found by the solver is not treated as a confirmed error. Each Z3 query
-  has a default timeout of 5 seconds. Nonlinear multiplication constraints can
-  reach this limit and return `unknown`; supporting `*` does not guarantee a proof.
+  has a default timeout of 5 seconds. Multiplication and division constraints can
+  reach this limit and return `unknown`; supporting an operator does not guarantee a proof.
 
 Proofs assume that actual arguments match their declared TypeScript types.
 The project supports a limited subset of the language; tests are not a formal

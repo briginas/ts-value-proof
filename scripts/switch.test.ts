@@ -147,9 +147,9 @@ test("switch selection rejects calls, getters, mutations and labeled control flo
 
 test("unsupported switch dependencies stay unknown without blocking independent predicates", async () => {
   const entry = fixture("unknown", `
-function arithmetic(x:number):number { switch(x/x) { case 1: return 1; default: return 0; } }
+function arithmetic(x:number):number { switch(x%x) { case 1: return 1; default: return 0; } }
 contract(arithmetic, { requires:x=>x>=0, ensures:r=>r>=0 });
-function label(x:number):number { switch(x) { case x/x: return 1; default: return 0; } }
+function label(x:number):number { switch(x) { case x%x: return 1; default: return 0; } }
 contract(label, { requires:x=>x>=0, ensures:r=>r>=0 });
 function opaque(flag:boolean,x:number):number { switch(flag) { case true: return x; default: return 0; } }
 contract(opaque, { requires:(_flag,x)=>x>=0, ensures:r=>r>=0 });

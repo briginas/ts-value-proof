@@ -35,9 +35,10 @@ The verifier also finds counterexamples and generates regression and property-ba
 
 **Value operations**
 
-- **`bigint` / `number`:** addition (`+`), subtraction (`-`), multiplication (`*`), unary minus (`-x`), and comparisons.
+- **`bigint` / `number`:** addition (`+`), subtraction (`-`), multiplication (`*`), division (`/`), unary minus (`-x`), and comparisons.
 - **UTF-16 strings:** concatenation (`+`), strict equality (`===`), strict inequality (`!==`), and `.length`.
-- **Unsupported arithmetic:** division (`/`), remainder (`%`), and exponentiation (`**`).
+- **Division:** `bigint` discards the fractional part; checked dependencies must exclude a zero divisor. `number` follows JavaScript binary64, including `NaN`, infinities and signed zero.
+- **Unsupported arithmetic:** remainder (`%`) and exponentiation (`**`).
 
 ## Try it
 

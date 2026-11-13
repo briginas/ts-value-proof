@@ -86,7 +86,7 @@ contract(independent, {requires:x=>x>=0, ensures:r=>r>=0});`);
     expect(r.dependencySource?.line).toBeGreaterThan(0);
     expect(r).not.toHaveProperty("counterexample");
   }
-  const operation = await results("operation", `function f(x:number):number{return x/x;}
+  const operation = await results("operation", `function f(x:number):number{return x%x;}
 contract(f,{requires:x=>x>=0,ensures:r=>r>=0});`);
   expect(operation.results.map(r => r.status)).toEqual(["satisfiable", "unknown"]);
 });
@@ -185,7 +185,7 @@ contract(f,{requires:(_o,x)=>x>=0});function caller(o:{value:unknown},x:number):
 });
 
 test("runtime preflight rejects unsupported graphs and partial predicates execute correctly", async () => {
-  for (const [name, params, body] of [["opaque","x:number,o:unknown","x"],["mixed","x:number,o:bigint","x"],["operator","x:number","x/x"]]) {
+  for (const [name, params, body] of [["opaque","x:number,o:unknown","x"],["mixed","x:number,o:bigint","x"],["operator","x:number","x%x"]]) {
     const entry=fixture("runtime-"+name,`function f(${params}):number{return ${body};}contract(f,{requires:()=>true});`);
     expect(()=>createTestRuntime(entry)).toThrow(/runtime graph/);
     await expect(generateRegressions(entry,path.dirname(entry)+"/generated")).rejects.toThrow(/runtime graph/);
@@ -297,7 +297,7 @@ contract(f,{ensures:r=>r>=0});`);
   }
   const report=await results("unsupported-call-expression", `function f(x:number):number{return x;}
 contract(f,{requires:x=>x>=0});
-function caller(x:number):number{return f(x)/2;}
+function caller(x:number):number{return f(x)%2;}
 contract(caller,{requires:()=>true,ensures:r=>r>=0});`);
   expect(report.results.find(r=>r.function==="caller" && r.kind==="call")?.status).toBe("disproved");
   expect(report.results.find(r=>r.function==="caller" && r.kind==="implementation"))
