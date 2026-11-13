@@ -141,7 +141,7 @@ export function validateIR(program: ProgramIR): void {
           expr.dependencies.forEach(child);
           return expr.sort;
         case "string": requireIR(typeof expr.value === "string", "string literal"); return "string";
-        case "length": requireIR(child(expr.operand) === "string", "string length operand"); return "float64";
+        case "length": requireIR(["string", "opaque"].includes(child(expr.operand)), "string length operand"); return "float64";
         case "number":
           try { decodeNumber(expr.value); } catch { requireIR(false, "exact number literal"); }
           return "float64";
@@ -173,9 +173,10 @@ export function validateIR(program: ProgramIR): void {
           return expr.op === "+" || expr.op === "-" || expr.op === "*" || expr.op === "/" ? left : "bool";
         }
         case "ternary": {
-          requireIR(allowCalls && !allowResult, "branch outside function body");
           const condition = pure(expr.condition), yes = child(expr.then), no = child(expr.else);
-          requireIR((condition === "bool" || condition === "opaque") && (yes === no || fn.returnSort === "opaque"), "branch sorts");
+          requireIR((condition === "bool" || condition === "opaque") &&
+            (yes === no || yes === "opaque" || no === "opaque" ||
+              (allowCalls && !allowResult && fn.returnSort === "opaque")), "branch sorts");
           return yes === no ? yes : "opaque";
         }
         case "call": {

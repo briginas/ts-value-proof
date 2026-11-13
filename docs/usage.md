@@ -122,14 +122,24 @@ the static verifier does not execute the code.
   contract parameters always refer to the original inputs. Preceding assignments
   remain checked even if overwritten, so a later guard cannot protect earlier
   division by zero. See [the assignments example](../examples/assignments.ts).
+- Ternary expressions (`condition ? yes : no`) support nesting, returns, operands,
+  local initializers, assignment values, `if`/`switch` conditions, case expressions,
+  call arguments, and contract predicates. Conditions must be boolean; both branches
+  must have the same value kind (`bigint`, `number`, `string`, boolean, or opaque).
+  Unions of literals of one primitive kind are allowed within expressions.
+  Only the selected branch executes, so `y === 0n ? 0n : x / y` guards division.
+  Calls are allowed in branches of return expressions, subject to the usual call
+  restrictions; calls in the condition and mutations inside expressions are rejected.
+  Boolean parameters remain opaque: depending on one produces `unknown`.
+  See [the ternary expressions example](../examples/ternary-expressions.ts).
 - Property/element writes, assignments inside expressions, `++`/`--`, other compound
   assignments, `var`, destructuring, uninitialized locals, `using`, loops, recursion, `async`, generics, overloads,
-  optional/rest/default parameters, and the ternary operator are not yet supported.
+  and optional/rest/default parameters are not yet supported.
   Remainder, exponentiation, and other unsupported operations in a
   checked condition produce `unknown`.
 - A contract must be an inline object with expression-bodied arrow predicates.
   Only one contract per function is allowed. Calls are allowed within return
-  expressions; the called function must have a contract. Calls in `if` conditions,
+  expressions; the called function must have a contract. Calls in `if` or ternary conditions,
   `switch` selectors or case expressions,
   contract predicates, or arguments to other calls are not supported.
 - Verification covers the module graph reachable from the entry file. Relative

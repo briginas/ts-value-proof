@@ -415,7 +415,7 @@ try {
     ["unsupported-assignment", "x %= 2n; return x;"],
     ["loop", "while (x < 0n) { x += 1n; } return x;"],
     ["try", "try { return x; } catch { return 0n; }"],
-    ["ternary", "return x > 0n ? x : -x;"],
+    ["ternary-truthiness", "return x ? x : -x;"],
     ["bigint-call", "return BigInt(x);"],
   ]) {
     assert.throws(() => adapt(fixture("unsupported-" + name, prefix +

@@ -42,7 +42,7 @@ export function dependencies(program: ProgramIR) {
       case "result": result?.(); break;
       case "unary": visit(expr.operand, env, result); break;
       case "binary": visit(expr.left, env, result); visit(expr.right, env, result); break;
-      case "ternary": visit(expr.condition, env); visit(expr.then, env); visit(expr.else, env); break;
+      case "ternary": visit(expr.condition, env, result); visit(expr.then, env, result); visit(expr.else, env, result); break;
       case "unsupported": expr.dependencies.forEach(e => visit(e, env, result)); break;
       case "call": {
         const callee = functions.get(expr.callee)!;

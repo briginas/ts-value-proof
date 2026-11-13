@@ -176,7 +176,7 @@ test("unsupported structures and effectful arguments remain rejected", () => {
     destructure:'function f({x}:{x:number}):number{return x;}',
     this:'function f(this:unknown,x:number):number{return x;}',
     loop:'function f(x:number):number{while(x>0){x=x-1;}return x;}',
-    ternary:'function f(x:number):number{return x>0?x:0;}',
+    ternaryTruthiness:'function f(x:number):number{return x?x:0;}',
     truthiness:'function f(x:number):number{if(x)return 1;return 0;}',
     callback:'function f(cb:()=>number):number{return cb();}',
   })) expect(()=>adapt(fixture("reject-"+name,declaration+'contract(f,{requires:()=>true});'))).toThrow();

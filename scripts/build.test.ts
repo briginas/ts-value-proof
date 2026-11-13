@@ -76,6 +76,16 @@ test("real Vite build removes contracts without tree shaking and keeps source ma
   expect(chunk.map?.sources.some(file => file.endsWith("entry.ts"))).toBe(true);
 });
 
+test("Vite verifies ternaries and preserves lazy branch execution", async () => {
+  const { root, entry } = fixture("ternaries", `export function f(x:bigint):bigint {
+    return x===0n?0n:12n/x;
+  } contract(f,{ensures:(r,x)=>x===0n?r===0n:r===12n/x});`);
+  const chunk = await bundle(config(root, entry));
+  expect(chunk.code).not.toMatch(/contract|ensures/);
+  const { f } = await execute(chunk.code);
+  for (const x of [-3n, 0n, 3n]) expect(f(x)).toBe(x === 0n ? 0n : 12n / x);
+});
+
 test("Vite verifies and executes functions with local declarations", async () => {
   const { root, entry } = fixture("locals", `export function f(x:bigint):bigint {
     const next = x+1n; let doubled:bigint = next*2n; return doubled;

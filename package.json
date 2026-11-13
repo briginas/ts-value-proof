@@ -6,7 +6,7 @@
     "typecheck": "tsc --noEmit",
     "test": "node scripts/check-contract-api.ts && node scripts/check.ts && node scripts/check-number.ts && node scripts/check-number-source.ts && npm run test:runtime && npm run test:build",
     "verify": "node scripts/verify.ts",
-    "test:runtime": "vitest run scripts/runtime.test.ts scripts/number-runtime.test.ts scripts/selective.test.ts scripts/string.test.ts scripts/switch.test.ts scripts/multiplication.test.ts scripts/division.test.ts scripts/local-variables.test.ts scripts/assignments.test.ts --maxWorkers=1 --testTimeout=60000",
+    "test:runtime": "vitest run scripts/runtime.test.ts scripts/number-runtime.test.ts scripts/selective.test.ts scripts/string.test.ts scripts/switch.test.ts scripts/multiplication.test.ts scripts/division.test.ts scripts/local-variables.test.ts scripts/assignments.test.ts scripts/ternary.test.ts --maxWorkers=1 --testTimeout=60000",
     "generate-tests": "node scripts/regressions.ts",
     "build:package": "tsc -p tsconfig.package.json",
     "prepack": "npm run build:package",

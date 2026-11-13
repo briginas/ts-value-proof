@@ -151,7 +151,7 @@ test("unsupported declaration forms, effects and scope escapes are rejected", ()
     "var y=x; return y;", "let y:bigint; return x;", "let y=x; y%=2n; return y;",
     "let y=x; y**=2n; return y;", "let y=x; y++; return y;", "let y=x; return ++y;",
     "const {a}=x; return a;", "const [a]=x; return a;", "const y=x.a; return 0n;",
-    "const y=x[0]; return 0n;", "const y=callee(1n); return y;", "const y=true?1n:2n;return y;",
+    "const y=x[0]; return 0n;", "const y=callee(1n); return y;", "const y=x?1n:2n;return y;",
     "using y=null; return x;",
   ];
   for (const [index,body] of unsupported.entries()) {

@@ -116,7 +116,7 @@ export async function withNumberModel<T>(run: (model: NumericModel<Term> & {
       Or: (...args) => term(z.mk_or(c,args.map(a => boolean(a).ast)), "boolean"),
       Implies: (a,b) => term(z.mk_implies(c,boolean(a).ast,boolean(b).ast), "boolean"),
       If(a,b,d) {
-        alive(); if (b.sort !== d.sort || b.sort === "boolean") throw new Error("Mismatched branch sorts");
+        alive(); if (b.sort !== d.sort) throw new Error("Mismatched branch sorts");
         return {...term(z.mk_ite(c,boolean(a).ast,b.ast,d.ast),b.sort),
           ...(b.sort === "string" ? {
             minLength:b.minLength! < d.minLength! ? b.minLength : d.minLength,

@@ -39,7 +39,8 @@ export async function verifyIntegers(program: ProgramIR, limits: SolverLimits = 
     eq: (a,b) => ctx.isBool(a) ? a.eq(boolean(b)) : numeric(a).eq(numeric(b)),
     Not: a => ctx.Not(boolean(a)), And: (...args) => ctx.And(...args.map(boolean)),
     Or: (...args) => ctx.Or(...args.map(boolean)), Implies: (a,b) => ctx.Implies(boolean(a),boolean(b)),
-    If: (a,b,c) => ctx.If(boolean(a),numeric(b),numeric(c)),
+    If: (a,b,c) => ctx.isBool(b) ? ctx.If(boolean(a),boolean(b),boolean(c))
+      : ctx.If(boolean(a),numeric(b),numeric(c)),
     async solve(assumptions, variables, limits) {
       // Keep the high-level wrapper's original ownership policy. Its AST/model
       // finalizers manage references; the low-level FP backend owns refs itself.

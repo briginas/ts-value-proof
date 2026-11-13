@@ -28,15 +28,18 @@ The verifier also finds counterexamples and generates regression and property-ba
 
 **Code structure**
 
-- **Supported:** local `const`/`let` with initializers, `return`, `if/else`, blocks, and `switch`
+- **Supported:** local `const`/`let` with initializers, `return`, `if/else`, ternary expressions (`?:`), blocks, and `switch`
   with fallthrough and unlabeled `break`.
+- **Ternary expressions:** boolean conditions, branches of the same value kind, and nesting;
+  only the selected branch executes. Supported in bodies and contract predicates.
+  See [example](examples/ternary-expressions.ts) and [full limits](docs/usage.md#limitations).
 - **Local variables:** plain names, nested scopes, and shadowing; no calls in initializers.
   See [example](examples/local-variables.ts) and [full limits](docs/usage.md#limitations).
 - **Assignments:** standalone `=`, `+=`, `-=`, `*=`, `/=` to local `let` variables
   and parameters, including across branches; string `+=` is supported.
   No calls on the right-hand side. See [example](examples/assignments.ts).
 - **Unsupported:** property writes, assignments inside expressions, `++`/`--`, other compound assignments, `var`, destructuring, loops,
-  ternary expressions (`?:`), and `try/catch/finally`.
+  and `try/catch/finally`.
 
 **Value operations**
 

@@ -103,10 +103,11 @@ export function prepareSource(fileName: string, onInput?: (file: string) => void
   }
   function expressionSort(node: ts.Expression): ValueSort | "bool" {
     const type = checker.getTypeAtLocation(node);
-    if (type.flags & ts.TypeFlags.BooleanLike) return "bool";
-    if (type.flags & ts.TypeFlags.NumberLike) return "float64";
-    if (type.flags & ts.TypeFlags.BigIntLike) return "int";
-    if (type.flags & ts.TypeFlags.StringLike) return "string";
+    const members = type.isUnion() ? type.types : [type];
+    if (members.every(t => t.flags & ts.TypeFlags.BooleanLike)) return "bool";
+    if (members.every(t => t.flags & ts.TypeFlags.NumberLike)) return "float64";
+    if (members.every(t => t.flags & ts.TypeFlags.BigIntLike)) return "int";
+    if (members.every(t => t.flags & ts.TypeFlags.StringLike)) return "string";
     return "opaque";
   }
   for (const fn of funcs.values()) {
@@ -127,7 +128,7 @@ export function prepareSource(fileName: string, onInput?: (file: string) => void
   }
   function stringLength(node: ts.Node): node is ts.PropertyAccessExpression {
     return ts.isPropertyAccessExpression(node) && !node.questionDotToken && node.name.text === "length" &&
-      !!(checker.getTypeAtLocation(node.expression).flags & ts.TypeFlags.StringLike);
+      expressionSort(node.expression) === "string";
   }
   function expression(node: ts.Expression, allowed: ReadonlyMap<ts.Symbol, Expr>, calls: string[] | false): Expr {
     if (ts.isStringLiteral(node) || ts.isNoSubstitutionTemplateLiteral(node)) return { kind: "string", value: node.text };
@@ -148,7 +149,13 @@ export function prepareSource(fileName: string, onInput?: (file: string) => void
     } else if (node.kind === ts.SyntaxKind.TrueKeyword || node.kind === ts.SyntaxKind.FalseKeyword) {
       return { kind: "literal", value: node.kind === ts.SyntaxKind.TrueKeyword };
     } else if (ts.isParenthesizedExpression(node)) return expression(node.expression, allowed, calls);
-    else if (ts.isBinaryExpression(node) && operators.has(node.operatorToken.getText())) {
+    else if (ts.isConditionalExpression(node)) {
+      requireBoolean(node.condition);
+      if (expressionSort(node.whenTrue) !== expressionSort(node.whenFalse))
+        error(node, "conditional branches must have the same value kind");
+      return { kind: "ternary", condition: expression(node.condition, allowed, false),
+        then: expression(node.whenTrue, allowed, calls), else: expression(node.whenFalse, allowed, calls) };
+    } else if (ts.isBinaryExpression(node) && operators.has(node.operatorToken.getText())) {
       if (["&&", "||"].includes(node.operatorToken.getText())) {
         requireBoolean(node.left); requireBoolean(node.right);
       }
