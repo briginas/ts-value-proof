@@ -54,6 +54,11 @@ const prelude = [
   "import Lean",
   "set_option autoImplicit false",
   "set_option linter.unusedVariables false",
+  "private theorem squareNonneg (x : Int) : 0 ≤ x * x := by",
+  "  by_cases h : 0 ≤ x",
+  "  · exact Int.mul_nonneg h h",
+  "  · have hn : x ≤ 0 := by omega",
+  "    exact Int.mul_nonneg_of_nonpos_of_nonpos hn hn",
   // Try small integral witnesses inside Lean. Backtrack through the complete
   // tuple, with each candidate checked by kernel reduction of the predicate.
   'syntax "tryIntWitnesses" : tactic',
@@ -74,7 +79,11 @@ function proof(goal: LeanGoal, positive: boolean): { proposition: string; steps:
   const vs = goal.variables;
   const inputs = vs.map((_, i) => `w${i}`);
   const assumptions = goal.assumptions.map((assumption) => `(${assumption})`).join(" ∧ ") || "True";
-  const arithmetic = "first | omega | (repeat' split at * <;> omega)";
+  let arithmetic = "first | omega | ((repeat' split at *) <;> omega)";
+  if (assumptions.includes("*") || goal.goal.includes("*")) {
+    // Lean 4.19 warns on every use of grind. Silence that notice only for this tactic.
+    arithmetic += " | (set_option grind.warning false in grind only [squareNonneg, Int.mul_nonneg, Int.mul_comm])";
+  }
   if (goal.kind === "preconditions") {
     const exists = quantify("∃", vs, assumptions);
     if (positive) return { proposition: exists, steps: ["tryIntWitnesses"] };

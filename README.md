@@ -1,8 +1,9 @@
 # ts-value-proof
 
 **Verify constraints on argument and return values in TypeScript.** Define allowed
-inputs and conditions the result must satisfy. Z3 proves those conditions hold for
-every allowed input—without running your code.
+inputs and conditions the result must satisfy. Z3 can prove those conditions hold
+for every allowed input without running your code. When installed locally, Lean 4
+independently checks the same conditions for supported `bigint` operations.
 This experimental verifier works within a limited set of supported operations and value models.
 
 ```ts
@@ -64,8 +65,10 @@ The CLI prints JSON: `verified` (exit 0), `refuted` / `inconsistent` (1),
 or `unknown` (2). Try `examples/withdraw.ts` for an intentional contract violation.
 
 With a compatible local Lean 4 installation, the CLI, API and Vite also check
-linear `bigint` contracts independently. For the unsafe call in `payUnchecked`,
-both engines report `disproved` and `crossCheck.comparison` is `agreed`.
+supported `bigint` contracts independently. Both engines prove `result >= 0n`
+for `square` in [the multiplication example](examples/multiplication.ts).
+For the unsafe call in `payUnchecked`, both engines report `disproved` and
+`crossCheck.comparison` is `agreed`.
 Without Lean, Z3 still reports the violation and the comparison is `unconfirmed`.
 Opposite verdicts produce a local `unknown` with `backend-disagreement`.
 Both checks start from the same TypeScript intermediate representation.

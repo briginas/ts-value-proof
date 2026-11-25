@@ -66,7 +66,7 @@ contract(flag,{ensures:r=>r>=0n});`);
   expect(verdicts("branches", "implementation")).toMatchObject([{ status: "unsupported", reason: expect.stringContaining("call") }]);
   expect(verdicts("swapped", "call")).toEqual([{ status: "proved" }]);
   expect(verdicts("eager", "preconditions")).toEqual([{ status: "satisfiable" }]);
-  expect(verdicts("eager", "implementation")).toMatchObject([{ status: "unsupported", reason: expect.stringContaining("*") }]);
+  expect(verdicts("eager", "implementation")).toEqual([{ status: "proved" }]);
   expect(verdicts("flag", "implementation")).toMatchObject([{ status: "unsupported", reason: expect.stringContaining("opaque") }]);
 });
 
@@ -96,9 +96,47 @@ contract(zeroDivision, { ensures: r => r === 0n });`);
     ["large", "implementation", "proved", "agreed"],
     ["zero", "implementation", "proved", "agreed"],
     ["wrong", "implementation", "disproved", "agreed"],
-    ["nonnegative", "preconditions", "unsupported", "unconfirmed"],
+    ["nonnegative", "preconditions", "satisfiable", "agreed"],
     ["scaleCall", "preconditions", "satisfiable", "agreed"],
     ["scaleCall", "call", "proved", "agreed"],
     ["zeroDivision", "implementation", "unsupported", "unconfirmed"],
   ]);
+});
+
+test("Lean proves the square example and keeps an exhausted proof unknown", async () => {
+  const entry = "examples/multiplication.ts";
+  const { results } = await verify(entry);
+  expect(results).toMatchObject([{
+    sourceName: "square", kind: "implementation", status: "proved",
+    crossCheck: { z3: { status: "proved" }, lean: { status: "proved" }, comparison: "agreed" },
+  }]);
+  const obligations = enumerateObligations(adapt(entry));
+  const limited = await checkLeanObligations(obligations, { maxHeartbeats: 1 });
+  expect(limited.get(obligations[0].key)).toMatchObject({ status: "unknown" });
+});
+
+test("Lean checks the sign, order and exact factors of two-parameter products", async () => {
+  const entry = contractFixture(`
+function nonnegative(x: bigint, y: bigint): bigint { return x * y; }
+contract(nonnegative, { requires: (x, y) => x >= 0n && y >= 0n, ensures: r => r >= 0n });
+function swapped(x: bigint, y: bigint): bigint { return x * y; }
+contract(swapped, { ensures: (r, x, y) => r === y * x });
+function wrongSign(x: bigint, y: bigint): bigint { return x * y; }
+contract(wrongSign, { ensures: r => r >= 0n });
+function missesWitness(x: bigint): bigint { return x * x; }
+contract(missesWitness, { ensures: r => r !== 4n });
+function shifted(x: bigint, y: bigint): bigint { return (x + 9007199254740993n) * y; }
+contract(shifted, { ensures: (r, x, y) => r === (x + 9007199254740992n) * y });`);
+  const { results } = await verify(entry);
+  expect(results.map(row => [row.sourceName, row.kind, row.crossCheck.lean.status, row.crossCheck.comparison])).toEqual([
+    ["nonnegative", "preconditions", "satisfiable", "agreed"],
+    ["nonnegative", "implementation", "proved", "agreed"],
+    ["swapped", "implementation", "proved", "agreed"],
+    ["wrongSign", "implementation", "disproved", "agreed"],
+    ["missesWitness", "implementation", "unknown", "unconfirmed"],
+    ["shifted", "implementation", "disproved", "agreed"],
+  ]);
+  expect(results.find(row => row.sourceName === "missesWitness")).toMatchObject({
+    status: "disproved", crossCheck: { z3: { status: "disproved" } },
+  });
 });

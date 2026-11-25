@@ -11,8 +11,15 @@ test("classifies the dependencies of each obligation separately", () => {
   expect(translations.get("sign")).toHaveProperty("goal");
 });
 
-test.each(["examples/number-identity.ts", "examples/string-basics.ts", "examples/multiplication.ts"])(
-  "classifies non-linear, floating-point and string obligations outside the fragment (%s)", file => {
+test("translates both occurrences of the square input as the same Lean integer", () => {
+  const [row] = enumerateObligations(adapt("examples/multiplication.ts"));
+  expect(translateLeanObligation(row)).toMatchObject({
+    goal: { variables: ["v0"], goal: "((v0 * v0) >= (0 : Int))" },
+  });
+});
+
+test.each(["examples/number-identity.ts", "examples/string-basics.ts"])(
+  "classifies floating-point and string obligations outside the fragment (%s)", file => {
     const rows = enumerateObligations(adapt(file));
     expect(rows.length).toBeGreaterThan(0);
     for (const row of rows) expect(translateLeanObligation(row)).toHaveProperty("unsupported");
