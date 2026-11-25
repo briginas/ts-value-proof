@@ -9,6 +9,17 @@ npm test
 npm run test:package
 ```
 
+For changes to verification, provision the pinned Lean toolchain on the developer
+or CI machine and run the integration suite separately:
+
+```sh
+elan toolchain install "$(cat lean-toolchain)"
+npm run test:lean
+```
+
+This suite requires real proofs from the pinned Lean version. The package smoke
+test also exercises the installed verifier without Lean.
+
 `npm test` includes type checks, verifier checks, replay, and property-based tests.
 Generated fixtures and reports go into the ignored `work/` directory. Passing
 tests does not formally prove the verifier correct.

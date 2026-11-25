@@ -63,6 +63,14 @@ npm run verify -- examples/division.ts
 The CLI prints JSON: `verified` (exit 0), `refuted` / `inconsistent` (1),
 or `unknown` (2). Try `examples/withdraw.ts` for an intentional contract violation.
 
+With a compatible local Lean 4 installation, the CLI, API and Vite also check
+linear `bigint` contracts independently. For the unsafe call in `payUnchecked`,
+both engines report `disproved` and `crossCheck.comparison` is `agreed`.
+Without Lean, Z3 still reports the violation and the comparison is `unconfirmed`.
+Opposite verdicts produce a local `unknown` with `backend-disagreement`.
+Both checks start from the same TypeScript intermediate representation.
+[Setup and report fields](docs/usage.md#lean-cross-checks).
+
 Only a limited TypeScript subset is supported; contracts do not enforce runtime
 checks. Verification covers the declared contracts, not arbitrary program correctness.
 

@@ -67,6 +67,51 @@ reasons, and counterexamples. `verified` applies only to the declared contracts
 and calls within the checked graph; callers outside that graph are not checked
 for compliance with preconditions.
 
+## Lean cross-checks
+
+When a compatible Lean 4 is installed, the verifier automatically asks Z3 and
+Lean about the same condition on the same program path. Both check whether
+`requires` admits any inputs, whether each call satisfies its callee's
+`requires`, and whether each implementation satisfies its `ensures`.
+Each engine translates the shared TypeScript intermediate representation (IR)
+independently. Agreement checks the reasoning from that IR onward. An error in
+the shared TypeScript-to-IR translation can affect both results.
+
+With Elan installed, run this once to add the tested toolchain:
+
+```sh
+elan toolchain install leanprover/lean4:v4.19.0
+```
+
+Normal verification uses a local installation. It works offline and never
+downloads Lean. The npm package and Z3 also work on machines without Lean.
+Lean supports `bigint` literals and parameters, addition, subtraction, unary
+minus, comparisons, Boolean connectives and branching. Scope is per condition.
+For example, a multiplication in the result can put an `ensures` outside the
+fragment while the preconditions of the same function are still checked.
+
+For existence proofs, including violations, Lean currently tries combinations
+of `0`, `1` and `-1`. A condition such as `x === 42n` can therefore be
+`satisfiable` in Z3 and `unknown` in Lean.
+
+For the call from `payUnchecked` in `examples/withdraw.ts`, these are the
+fields to read in its `results` entry. The last row illustrates a hypothetical
+conflict on the same call.
+
+| Scenario | `crossCheck.z3.status` | `crossCheck.lean.status` | `crossCheck.comparison` | Local `status` |
+| --- | --- | --- | --- | --- |
+| With Lean | `disproved` | `disproved` | `agreed` | `disproved` |
+| Without Lean | `disproved` | `unavailable` | `unconfirmed` | `disproved` |
+| Opposite verdicts | `disproved` | `proved` | `disagreement` | `unknown` |
+
+`crossCheck.lean.reason` explains `unavailable` (missing or incompatible Lean),
+`unsupported` (outside the fragment), or `unknown` (no accepted proof).
+An unconfirmed comparison retains the Z3 verdict, including `unknown`.
+A conflict has `reasonCode: "backend-disagreement"`. When it is the only
+obligation, the CLI exits with 2 and Vite rejects the build. Only a local
+`disproved` can supply a Z3 counterexample for a regression, and the generator
+saves it only after replaying the violation.
+
 ## Generating tests
 
 ```sh

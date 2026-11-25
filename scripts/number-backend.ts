@@ -1,3 +1,4 @@
+import type { VerificationObligation } from "./obligations.ts";
 import { dependencies } from "./dependencies.ts";
 import { init, type Z3_ast } from "z3-solver";
 import type { ProgramIR } from "./ir.ts";
@@ -180,8 +181,8 @@ export async function withNumberModel<T>(run: (model: NumericModel<Term> & {
   } finally { active = false; z.del_context(c); }
 }
 
-export async function verifyNumbers(program: ProgramIR, limits: SolverLimits = {}) {
+export async function verifyNumbers(program: ProgramIR, limits: SolverLimits = {}, obligations?: readonly VerificationObligation[]) {
   validateIR(program);
   if (numericSort(program) !== "float64" && dependencies(program).sorts.size) throw new Error("Number backend requires float64 IR");
-  return withNumberModel(model => verifyWithModel(program, model, limits));
+  return withNumberModel(model => verifyWithModel(program, model, limits, obligations));
 }

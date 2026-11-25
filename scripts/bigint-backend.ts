@@ -1,3 +1,4 @@
+import type { VerificationObligation } from "./obligations.ts";
 import { init, type Arith, type Bool, type Context } from "z3-solver";
 import type { ProgramIR } from "./ir.ts";
 import { numericSort, validateIR } from "./ir-integrity.ts";
@@ -6,7 +7,7 @@ export type { SolverLimits, ProofResult, VerificationResult } from "./verificati
 
 type Value = Arith<"main"> | Bool<"main">;
 let context: Promise<Context<"main">> | undefined;
-export async function verifyIntegers(program: ProgramIR, limits: SolverLimits = {}) {
+export async function verifyIntegers(program: ProgramIR, limits: SolverLimits = {}, obligations?: readonly VerificationObligation[]) {
   validateIR(program);
   if (numericSort(program) !== "int") throw new Error("Integer backend requires bigint IR");
   const ctx = await (context ??= init().then(({ Context }) => new Context("main")));
@@ -61,5 +62,5 @@ export async function verifyIntegers(program: ProgramIR, limits: SolverLimits = 
       return { status, counterexample };
     },
   };
-  return verifyWithModel(program, model, limits);
+  return verifyWithModel(program, model, limits, obligations);
 }

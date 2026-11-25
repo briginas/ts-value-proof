@@ -33,3 +33,10 @@ jobs:
       - run: npm run typecheck
       - run: npm test
       - run: npm run test:package
+      - name: Cross-check with pinned Lean
+        if: matrix.node == 26
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y elan
+          elan toolchain install "$(cat lean-toolchain)"
+          npm run test:lean

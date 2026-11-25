@@ -5,6 +5,7 @@ import { execFileSync, spawnSync } from "node:child_process";
 import { adapt } from "./adapter.ts";
 import { validateIR } from "./ir-integrity.ts";
 import { prettyExpr, type Expr } from "./ir.ts";
+import { enumerateObligations } from "./obligations.ts";
 import { verifyIntegers } from "./bigint-backend.ts";
 import { verify, type VerificationReport } from "./verify.ts";
 import { pathToFileURL } from "node:url";
@@ -332,6 +333,8 @@ try {
   collectCalls(callIR.functions.find(fn => fn.sourceName === "caller")!.body);
   assert.equal(callNodes.length, 3);
   assert.equal(callNodes[1].id, callNodes[2].id);
+  const occurrences = enumerateObligations(callIR).filter(o => o.kind === "call" && o.call.id === callNodes[1].id);
+  assert.equal(new Set(occurrences.map(o => o.key)).size, 2);
   const callSource = fs.readFileSync("work/cases/continuation-calls.ts", "utf8");
   assert.equal(callSource.slice(callNodes[1].source.start, callNodes[1].source.end), "positive(x + 1n)");
   const callRuntime = (await runtime(continuationSource)).caller;
@@ -345,6 +348,7 @@ try {
   const sharedCalls = unsafeContinuation.results.filter(r => r.kind === "call" && r.callId === unsafeContinuationCall.callId);
   assert.equal(sharedCalls.length, 2);
   assert.deepEqual(sharedCalls.map(r => r.status), ["proved", "disproved"]);
+  assert.deepEqual(sharedCalls.map(r => r.crossCheck.z3.status), ["proved", "disproved"]);
   assert.deepEqual(sharedCalls.map(r => r.kind === "call" && r.pathCondition),
     ["((x > 0n) && (!(x > 1n)))", "((!(x > 0n)) && (!(x < (-1n))))"]);
   for (const call of sharedCalls) {

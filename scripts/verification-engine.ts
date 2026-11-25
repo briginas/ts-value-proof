@@ -1,6 +1,7 @@
 import { prettyExpr, type Expr, type FunctionIR, type ProgramIR, type SourceLocation, type ValueSort } from "./ir.ts";
-import { callPaths, truth, and, not } from "./dependencies.ts";
-import { assertCoverage, validateIR } from "./ir-integrity.ts";
+import { truth, and, not } from "./dependencies.ts";
+import { validateIR } from "./ir-integrity.ts";
+import { enumerateObligations, type VerificationObligation } from "./obligations.ts";
 import { encodeScalar, type EncodedValue, type NumericSort } from "./numeric-values.ts";
 
 /** The traversal owns paths and obligations; a model owns terms and solver resources. */
@@ -36,10 +37,10 @@ export type SolveResult =
   | { status: "unknown"; reason: string };
 
 export type SolverLimits = { timeoutMs?: number; resourceLimit?: number };
-export type ProofResult =
+export type ProofResult<AdditionalReason extends string = never> =
   | { status: "proved" }
   | { status: "disproved"; reasonCode: "contract-violation"; reason: string; counterexample: Record<string, EncodedValue> }
-  | { status: "unknown"; reasonCode: "solver-unknown" | "weak-callee-contract" | "unsupported-dependency" | "incomplete-counterexample"; reason: string; dependencySource?: SourceLocation };
+  | { status: "unknown"; reasonCode: "solver-unknown" | "weak-callee-contract" | "unsupported-dependency" | "incomplete-counterexample" | AdditionalReason; reason: string; dependencySource?: SourceLocation };
 type FunctionReference = { function: string; sourceName: string; source: SourceLocation };
 type Requirement = { condition: string; source: SourceLocation };
 type Obligation = FunctionReference & {
@@ -50,11 +51,11 @@ type Obligation = FunctionReference & {
   | { kind: "call"; contractSource: SourceLocation; callId: string; callSource: SourceLocation;
       callee: FunctionReference; arguments: Record<string, string>; checkedCondition: string; pathCondition: string }
 );
-export type VerificationResult =
+export type VerificationResult<AdditionalReason extends string = never> =
   | (FunctionReference & { kind: "preconditions"; condition: string; requires: Requirement[];
       status: "satisfiable" | "inconsistent" | "unknown";
-      reasonCode?: "inconsistent-contract" | "solver-unknown" | "unsupported-dependency"; reason?: string; dependencySource?: SourceLocation })
-  | (Obligation & ProofResult);
+      reasonCode?: "inconsistent-contract" | "solver-unknown" | "unsupported-dependency" | AdditionalReason; reason?: string; dependencySource?: SourceLocation })
+  | (Obligation & ProofResult<AdditionalReason>);
 type Pending<V> = {
   obligation: Obligation;
   abstractCalls?: boolean;
@@ -83,7 +84,8 @@ function substitute(expr: Expr, bindings: ReadonlyMap<string, Expr>): Expr {
   }
 }
 
-export async function verifyWithModel<V>(program: ProgramIR, ctx: NumericModel<V>, limits: SolverLimits = {}): Promise<VerificationResult[]> {
+export async function verifyWithModel<V>(program: ProgramIR, ctx: NumericModel<V>, limits: SolverLimits = {},
+                                         obligations?: readonly VerificationObligation[]) {
   for (const value of [limits.timeoutMs, limits.resourceLimit])
     if (value !== undefined && (!Number.isSafeInteger(value) || value < 1 || value > 0x7fffffff))
       throw new Error("Solver limits must be positive 32-bit integers");
@@ -91,8 +93,13 @@ export async function verifyWithModel<V>(program: ProgramIR, ctx: NumericModel<V
   const irs = program.functions;
   type Env = ReadonlyMap<string, () => V>;
   const functions = new Map(irs.map(ir => [ir.name, ir]));
-  const results: VerificationResult[] = [];
-  const observedCalls = new Set<string>();
+  const results: (VerificationResult & { key: string })[] = [];
+  const byOwner = new Map<FunctionIR, VerificationObligation[]>();
+  for (const item of obligations ?? enumerateObligations(program)) {
+    const group = byOwner.get(item.owner);
+    if (group) group.push(item);
+    else byOwner.set(item.owner, [item]);
+  }
   let fresh = 0;
   const bool = ctx.boolean;
   const numeric = ctx.numeric;
@@ -100,9 +107,9 @@ export async function verifyWithModel<V>(program: ProgramIR, ctx: NumericModel<V
   const predicates = (ir: FunctionIR, kind: "requires" | "ensures"): Expr[] =>
     ir.contracts.filter(c => c.kind === kind).map(c => c.predicate);
 
-  for (const ir of irs) {
+  for (const [ir, group] of byOwner) {
     const name = ir.name;
-    const requirements = ir.contracts.filter(c => c.kind === "requires");
+    const requirements = group[0].requirements;
     const details = { ...reference(ir), requires: requirements.map(p =>
       ({ condition: prettyExpr(p.predicate), source: p.source })) };
     const variables = new Map(ir.params.filter(p => supports(p.sort)).map(p => [p.name, ctx.variable(name + "::arg::" + p.name, p.sort)]));
@@ -214,15 +221,14 @@ export async function verifyWithModel<V>(program: ProgramIR, ctx: NumericModel<V
       }
     }
 
-    const paths = callPaths(ir.body);
-    for (const {call} of paths) observedCalls.add(call.id);
     let preFailure: ProofResult | undefined;
     let inconsistent = false;
-    if (requirements.length) {
-      const base = { ...details, kind: "preconditions" as const,
+    const consistencyTask = group.find(o => o.kind === "preconditions");
+    if (consistencyTask) {
+      const base = { ...details, key: consistencyTask.key, kind: "preconditions" as const,
         condition: prettyExpr(requirements.reduce((expr, p) => and(expr, p.predicate), truth)) };
       try {
-        pre = predicates(ir, "requires").map(p => bool(evaluate(p, env)));
+        pre = requirements.map(p => bool(evaluate(p.predicate, env)));
         // Assuming requires here would silently discard inputs on which it throws.
         const divisionFailure = await checkDivisions([]);
         if (divisionFailure) {
@@ -244,7 +250,7 @@ export async function verifyWithModel<V>(program: ProgramIR, ctx: NumericModel<V
       }
     }
     if (inconsistent) continue;
-    async function check(obligation: Obligation, goal: () => V, path?: Expr): Promise<void> {
+    async function check(obligation: Obligation & { key: string }, goal: () => V, path?: Expr): Promise<void> {
       if (preFailure) { results.push({ ...obligation, ...preFailure }); return; }
       facts.length = 0;
       divisions.length = 0;
@@ -267,28 +273,28 @@ export async function verifyWithModel<V>(program: ProgramIR, ctx: NumericModel<V
         results.push({ ...obligation, ...await prove(ctx, task, limits) });
       } catch (error) { results.push({ ...obligation, ...unsupportedResult(error) }); }
     }
-    for (const {call, path} of paths) {
-      const callee = functions.get(call.callee)!;
-      const argumentExprs = new Map(callee.params.map((p, i) => [p.name, call.args[i]]));
-      const callEnv: Env = new Map(callee.params.map((p, i) => [p.name, () => evaluate(call.args[i], env)]));
-      for (const requirement of callee.contracts.filter(c => c.kind === "requires")) {
-        await check({ ...details, kind: "call", condition: callee.sourceName + ": " + prettyExpr(requirement.predicate),
-          contractSource: requirement.source, callId: call.id, callSource: call.source,
+    for (const task of group) {
+      if (task.kind === "preconditions") continue;
+      const { key, predicate } = task;
+      if (task.kind === "call") {
+        const { call, path, callee } = task;
+        const argumentExprs = new Map(callee.params.map((p, i) => [p.name, call.args[i]]));
+        const callEnv: Env = new Map(callee.params.map((p, i) => [p.name, () => evaluate(call.args[i], env)]));
+        await check({ ...details, key, kind: "call", condition: callee.sourceName + ": " + prettyExpr(predicate.predicate),
+          contractSource: predicate.source, callId: call.id, callSource: call.source,
           callee: reference(callee), arguments: Object.fromEntries([...argumentExprs].map(([key, value]) => [key, prettyExpr(value)])),
-          checkedCondition: prettyExpr(substitute(requirement.predicate, argumentExprs)), pathCondition: prettyExpr(path) },
-          () => evaluate(requirement.predicate, callEnv), path);
+          checkedCondition: prettyExpr(substitute(predicate.predicate, argumentExprs)), pathCondition: prettyExpr(path) },
+          () => evaluate(predicate.predicate, callEnv), path);
+      } else {
+        let body: V | undefined;
+        await check({ ...details, key, kind: "implementation", condition: prettyExpr(predicate.predicate), contractSource: predicate.source },
+          () => evaluate(predicate.predicate, env, () => {
+            if (ir.returnSort === "opaque") throw new UnsupportedDependency("Unsupported result type: " + ir.sourceName, ir.source);
+            return body ??= evaluate(ir.body, env, undefined, ctx.truth(true), true);
+          }));
       }
     }
-    for (const post of ir.contracts.filter(c => c.kind === "ensures")) {
-      let body: V | undefined;
-      await check({ ...details, kind: "implementation", condition: prettyExpr(post.predicate), contractSource: post.source },
-        () => evaluate(post.predicate, env, () => {
-          if (ir.returnSort === "opaque") throw new UnsupportedDependency("Unsupported result type: " + ir.sourceName, ir.source);
-          return body ??= evaluate(ir.body, env, undefined, ctx.truth(true), true);
-        }));
-    }
   }
-  assertCoverage(program.coverage.calls, observedCalls, "Backend call");
   return results;
 }
 
