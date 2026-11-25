@@ -3,13 +3,13 @@ import type { Expr } from "./ir.ts";
 import { runLeanGoals, type LeanGoal, type LeanRunnerOptions } from "./lean-runner.ts";
 import type { VerificationObligation } from "./obligations.ts";
 
-type Term = { text: string; sort: "Int" | "Prop" };
+type Term = { text: string; sort: "Int" | "Prop"; isIntLiteral?: boolean };
 type Bindings = ReadonlyMap<string, () => Term>;
 type Translation = { goal: LeanGoal } | { unsupported: string };
 
 class OutsideLeanFragment extends Error {}
 
-const int = (text: string): Term => ({ text, sort: "Int" });
+const int = (text: string, isIntLiteral = false): Term => ({ text, sort: "Int", isIntLiteral });
 const prop = (text: string): Term => ({ text, sort: "Prop" });
 
 function as(term: Term, sort: Term["sort"]): string {
@@ -22,7 +22,7 @@ function translate(expr: Expr, bindings: Bindings, result?: () => Term): Term {
   switch (expr.kind) {
     case "bigint": {
       if (!/^(0|[1-9][0-9]*)$/.test(expr.value)) throw new Error("Invalid bigint in Lean translation");
-      return int(`(${expr.value} : Int)`);
+      return int(`(${expr.value} : Int)`, true);
     }
     case "literal": return prop(expr.value ? "True" : "False");
     case "ident": {
@@ -43,12 +43,19 @@ function translate(expr: Expr, bindings: Bindings, result?: () => Term): Term {
       const yes = visit(expr.then);
       return { sort: yes.sort, text: `(if ${condition} then ${yes.text} else ${as(visit(expr.else), yes.sort)})` };
     }
-    case "unary":
-      return expr.op === "!" ? prop(`(¬ ${as(visit(expr.operand), "Prop")})`) : int(`(-${as(visit(expr.operand), "Int")})`);
+    case "unary": {
+      const operand = visit(expr.operand);
+      if (expr.op === "!") return prop(`(¬ ${as(operand, "Prop")})`);
+      return int(`(-${as(operand, "Int")})`, operand.isIntLiteral);
+    }
     case "binary": {
-      if (expr.op === "*" || expr.op === "/") throw new OutsideLeanFragment(`Lean does not model operator ${expr.op}`);
+      if (expr.op === "/") throw new OutsideLeanFragment("Lean does not model operator /");
       const left = visit(expr.left), right = visit(expr.right);
+      if (expr.op === "*" && !left.isIntLiteral && !right.isIntLiteral) {
+        throw new OutsideLeanFragment("Lean requires a bigint literal factor for *");
+      }
       switch (expr.op) {
+        case "*":
         case "+":
         case "-": return int(`(${as(left, "Int")} ${expr.op} ${as(right, "Int")})`);
         case "<":
