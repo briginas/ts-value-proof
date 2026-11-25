@@ -8,20 +8,20 @@ This experimental verifier works within a limited set of supported operations an
 ```ts
 import { contract } from "../src/contract.ts"; // ts-value-proof API, from examples/
 
-function increment(value: bigint): bigint {
-  return value + 1n; // Try - 1n: types pass, contract fails.
+function quotient(dividend: bigint, divisor: bigint): bigint {
+  return dividend / divisor;
 }
 
-contract(increment, {
-  // Z3 proves this for every bigint input.
-  ensures: (result, value) => result > value,
+contract(quotient, {
+  requires: (dividend, divisor) => divisor !== 0n,
+  ensures: (result, dividend, divisor) => result === dividend / divisor,
 });
 ```
 
-[Runnable example](examples/bigint-exact.ts).
+[Runnable example](examples/division.ts).
 
-`requires` defines valid inputs; `ensures` defines expected results. Here, the
-contract proves that the result is greater than the input for every `bigint`.
+`requires` excludes a zero divisor. For every remaining pair of `bigint` inputs,
+`ensures` checks that the result equals the quotient rounded toward zero.
 The verifier also finds counterexamples and generates regression and property-based tests.
 
 🔴 **Limited support:**
@@ -57,7 +57,7 @@ Node.js `^24.12.0 || >=26.0.0`. From the repository root:
 
 ```sh
 npm ci --ignore-scripts
-npm run verify -- examples/bigint-exact.ts
+npm run verify -- examples/division.ts
 ```
 
 The CLI prints JSON: `verified` (exit 0), `refuted` / `inconsistent` (1),
