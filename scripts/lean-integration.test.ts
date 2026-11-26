@@ -99,7 +99,7 @@ contract(zeroDivision, { ensures: r => r === 0n });`);
     ["nonnegative", "preconditions", "satisfiable", "agreed"],
     ["scaleCall", "preconditions", "satisfiable", "agreed"],
     ["scaleCall", "call", "proved", "agreed"],
-    ["zeroDivision", "implementation", "unsupported", "unconfirmed"],
+    ["zeroDivision", "implementation", "unknown", "unconfirmed"],
   ]);
 });
 
@@ -139,4 +139,75 @@ contract(shifted, { ensures: (r, x, y) => r === (x + 9007199254740992n) * y });`
   expect(results.find(row => row.sourceName === "missesWitness")).toMatchObject({
     status: "disproved", crossCheck: { z3: { status: "disproved" } },
   });
+});
+
+test("Lean agrees on guarded quotients, signed truncation and refutation", async () => {
+  const entry = contractFixture(`
+function signs(): bigint { return -9007199254740995n / -3n; }
+contract(signs, { ensures: r => r === 3002399751580331n && -7n / 3n === -2n && 7n / -3n === -2n && -1n / 2n === 0n });
+function quarter(x: bigint, y: bigint): bigint { return x / y / 4n; }
+contract(quarter, { requires: (x,y) => y !== 0n && x / y >= 0n, ensures: (r,x,y) => r === (x / y) / 4n });
+function boundedHalf(x: bigint): bigint { return x / 2n; }
+contract(boundedHalf, { requires: x => x >= 0n, ensures: (r,x) => r <= x });
+function nonnegative(x: bigint, y: bigint): bigint { return x / y; }
+contract(nonnegative, { requires: (x,y) => x >= 0n && y > 0n, ensures: r => r >= 0n });
+function wrong(x: bigint): bigint { return x / -1n; }
+contract(wrong, { ensures: (r,x) => r === x });
+function positive(x: bigint): bigint { return x; }
+contract(positive, { requires: x => x > 0n });
+function guardedCall(x: bigint, y: bigint): bigint {
+  if (y === 0n || x / y <= 0n) return 0n;
+  return positive(x / y);
+}`);
+  const { results } = await verify(entry);
+  expect(results.map(row => [row.sourceName, row.kind, row.crossCheck.lean.status, row.crossCheck.comparison])).toEqual([
+    ["signs", "implementation", "proved", "agreed"],
+    ["quarter", "preconditions", "satisfiable", "agreed"],
+    ["quarter", "implementation", "proved", "agreed"],
+    ["boundedHalf", "preconditions", "satisfiable", "agreed"],
+    ["boundedHalf", "implementation", "proved", "agreed"],
+    ["nonnegative", "preconditions", "satisfiable", "agreed"],
+    ["nonnegative", "implementation", "proved", "agreed"],
+    ["wrong", "implementation", "disproved", "agreed"],
+    ["positive", "preconditions", "satisfiable", "agreed"],
+    ["guardedCall", "call", "proved", "agreed"],
+  ]);
+});
+
+test("Lean checks definedness before accepting either polarity or assuming a guard", async () => {
+  const entry = contractFixture(`
+function unsafeReq(y: bigint): bigint { return y; }
+contract(unsafeReq, { requires: y => 1n / y > 0n && y !== 0n, ensures: r => r === r });
+function definedContradiction(y: bigint): bigint { return y; }
+contract(definedContradiction, { requires: y => y / 2n !== y / 2n });
+function impossibleReq(y: bigint): bigint { return y; }
+contract(impossibleReq, { requires: y => 1n / y !== 1n / y });
+function unused(x: bigint): bigint { const q = 1n / x; return 0n; }
+contract(unused, { ensures: r => r === 1n });
+function eagerResult(x: bigint): bigint { return 1n / x; }
+contract(eagerResult, { ensures: (r,x) => x === 0n || r === 1n / x });
+function accept(x: bigint, y: bigint): bigint { return y; }
+contract(accept, { requires: (x,y) => y === 0n || x >= 0n });
+function eagerArg(x: bigint, y: bigint): bigint { return accept(x/y, y); }
+function unsafePath(y: bigint): bigint { if (1n / y > 0n) return accept(0n, y); return 0n; }
+function nested(x: bigint): bigint { return 1n / (x / 2n); }
+contract(nested, { requires: x => x !== 0n, ensures: r => r === r });
+function independent(x: bigint): bigint { return 1n / x; }
+contract(independent, { ensures: (r,x) => x === x });`);
+  const rows = enumerateObligations(adapt(entry));
+  const answers = await checkLeanObligations(rows);
+  expect(rows.map(row => [row.owner.sourceName, row.kind, answers.get(row.key)?.status])).toEqual([
+    ["unsafeReq", "preconditions", "unknown"],
+    ["unsafeReq", "implementation", "unknown"],
+    ["definedContradiction", "preconditions", "inconsistent"],
+    ["impossibleReq", "preconditions", "unknown"],
+    ["unused", "implementation", "unknown"],
+    ["eagerResult", "implementation", "unknown"],
+    ["accept", "preconditions", "satisfiable"],
+    ["eagerArg", "call", "unknown"],
+    ["unsafePath", "call", "unknown"],
+    ["nested", "preconditions", "satisfiable"],
+    ["nested", "implementation", "unknown"],
+    ["independent", "implementation", "proved"],
+  ]);
 });

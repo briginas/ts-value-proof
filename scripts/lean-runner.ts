@@ -15,6 +15,7 @@ export type LeanGoal = {
   variables: string[];
   assumptions: string[];
   goal: string;
+  divisionChecks?: string[];
 };
 
 export type LeanRunnerOptions = {
@@ -75,15 +76,24 @@ function quantify(quantifier: string, variables: string[], proposition: string):
   return variables.length ? `${quantifier} ${variables.join(" ")} : Int, ${proposition}` : proposition;
 }
 
+function arithmeticTactic(formula: string): string {
+  let arithmetic = "first | omega | ((repeat' split at *) <;> omega)";
+  if (formula.includes("Int.tdiv")) {
+    arithmetic += " | decide | (simp_all <;> omega) | (apply Int.tdiv_nonneg <;> omega)" +
+      " | (simp (disch := omega) only [Int.tdiv_eq_ediv_of_nonneg] at * <;> omega)";
+  }
+  if (formula.includes("*")) {
+    // Lean 4.19 warns on every use of grind. Silence that notice only for this tactic.
+    arithmetic += " | (set_option grind.warning false in grind only [squareNonneg, Int.mul_nonneg, Int.mul_comm])";
+  }
+  return arithmetic;
+}
+
 function proof(goal: LeanGoal, positive: boolean): { proposition: string; steps: string[] } {
   const vs = goal.variables;
   const inputs = vs.map((_, i) => `w${i}`);
   const assumptions = goal.assumptions.map((assumption) => `(${assumption})`).join(" ∧ ") || "True";
-  let arithmetic = "first | omega | ((repeat' split at *) <;> omega)";
-  if (assumptions.includes("*") || goal.goal.includes("*")) {
-    // Lean 4.19 warns on every use of grind. Silence that notice only for this tactic.
-    arithmetic += " | (set_option grind.warning false in grind only [squareNonneg, Int.mul_nonneg, Int.mul_comm])";
-  }
+  const arithmetic = arithmeticTactic(assumptions + goal.goal);
   if (goal.kind === "preconditions") {
     const exists = quantify("∃", vs, assumptions);
     if (positive) return { proposition: exists, steps: ["tryIntWitnesses"] };
@@ -116,7 +126,19 @@ function batchSource(goals: readonly LeanGoal[], heartbeats: number) {
     const pair = [];
     for (const positive of [true, false]) {
       const name = `check${index}${positive ? "Pos" : "Neg"}`;
-      const { proposition, steps } = proof(goal, positive);
+      let { proposition, steps } = proof(goal, positive);
+      if (goal.divisionChecks?.length) {
+        // Both polarities require the domain on *all* evaluated paths, even
+        // for existential preconditions or a single refuting witness.
+        const checks = goal.divisionChecks.join(" ∧ ");
+        const domain = quantify("∀", goal.variables, checks);
+        proposition = `(${domain}) ∧ (${proposition})`;
+        steps = [
+          "constructor",
+          `· intros; ${arithmeticTactic(checks)}`,
+          "· " + steps[0], ...steps.slice(1).map(step => "  " + step),
+        ];
+      }
       const start = lines.length + 1;
       lines.push(
         `set_option maxHeartbeats ${heartbeats} in`,

@@ -17,8 +17,14 @@ function as(term: Term, sort: Term["sort"]): string {
   return term.text;
 }
 
-function translate(expr: Expr, bindings: Bindings, result?: () => Term): Term {
-  const visit = (child: Expr) => translate(child, bindings, result);
+type Evaluation = {
+  divisionChecks: Set<string>;
+  guards: readonly string[];
+};
+
+function translate(expr: Expr, bindings: Bindings, evaluation: Evaluation, result?: () => Term): Term {
+  const visit = (child: Expr, guard?: string) => translate(child, bindings,
+    guard === undefined ? evaluation : { ...evaluation, guards: [...evaluation.guards, guard] }, result);
   switch (expr.kind) {
     case "bigint": {
       if (!/^(0|[1-9][0-9]*)$/.test(expr.value)) throw new Error("Invalid bigint in Lean translation");
@@ -35,13 +41,14 @@ function translate(expr: Expr, bindings: Bindings, result?: () => Term): Term {
       return result();
     }
     case "sequence":
-      // A discarded initializer still executes. All operations in our fragment are total.
+      // A discarded initializer still executes and can divide by zero.
       visit(expr.first);
       return visit(expr.then);
     case "ternary": {
       const condition = as(visit(expr.condition), "Prop");
-      const yes = visit(expr.then);
-      return { sort: yes.sort, text: `(if ${condition} then ${yes.text} else ${as(visit(expr.else), yes.sort)})` };
+      const yes = visit(expr.then, condition);
+      const no = visit(expr.else, `(¬ ${condition})`);
+      return { sort: yes.sort, text: `(if ${condition} then ${yes.text} else ${as(no, yes.sort)})` };
     }
     case "unary": {
       const operand = visit(expr.operand);
@@ -49,9 +56,16 @@ function translate(expr: Expr, bindings: Bindings, result?: () => Term): Term {
       return int(`(-${as(operand, "Int")})`);
     }
     case "binary": {
-      if (expr.op === "/") throw new OutsideLeanFragment("Lean does not model operator /");
-      const left = visit(expr.left), right = visit(expr.right);
+      const left = visit(expr.left);
+      const guard = expr.op === "&&" ? as(left, "Prop")
+        : expr.op === "||" ? `(¬ ${as(left, "Prop")})` : undefined;
+      const right = visit(expr.right, guard);
       switch (expr.op) {
+        case "/": {
+          const divisor = as(right, "Int");
+          evaluation.divisionChecks.add(`(${[...evaluation.guards, `(${divisor} ≠ 0)`].join(" → ")})`);
+          return int(`(Int.tdiv ${as(left, "Int")} ${divisor})`);
+        }
         case "*":
         case "+":
         case "-": return int(`(${as(left, "Int")} ${expr.op} ${as(right, "Int")})`);
@@ -88,22 +102,27 @@ export function translateLeanObligation(obligation: VerificationObligation): Tra
     return int(name);
   }]));
   try {
-    const assumptions = requirements.map(req => as(translate(req.predicate, inputs), "Prop"));
+    const divisionChecks = new Set<string>();
+    const unconditional = { divisionChecks, guards: [] };
+    let assumptions = requirements.map(req => as(translate(req.predicate, inputs, unconditional), "Prop"));
+    const evaluation = { divisionChecks, guards: assumptions };
     let goal = "True";
     if (obligation.kind === "implementation") {
       let result: Term | undefined;
-      goal = as(translate(obligation.predicate.predicate, inputs, () => {
+      goal = as(translate(obligation.predicate.predicate, inputs, evaluation, () => {
         if (owner.returnSort !== "int") throw new OutsideLeanFragment(`Lean does not model result sort ${owner.returnSort}`);
-        return result ??= translate(owner.body, inputs);
+        return result ??= translate(owner.body, inputs, evaluation);
       }), "Prop");
     }
     if (obligation.kind === "call") {
-      assumptions.push(as(translate(obligation.path, inputs), "Prop"));
+      const path = as(translate(obligation.path, inputs, evaluation), "Prop");
+      assumptions = [...assumptions, path];
+      const atCall = { divisionChecks, guards: assumptions };
       const args: Bindings = new Map(obligation.callee.params.map((param, index) =>
-        [param.name, () => translate(obligation.call.args[index], inputs)]));
-      goal = as(translate(obligation.predicate.predicate, args), "Prop");
+        [param.name, () => translate(obligation.call.args[index], inputs, atCall)]));
+      goal = as(translate(obligation.predicate.predicate, args, atCall), "Prop");
     }
-    return { goal: { key, kind, variables: [...used], assumptions, goal } };
+    return { goal: { key, kind, variables: [...used], assumptions, goal, divisionChecks: [...divisionChecks] } };
   } catch (error) {
     if (error instanceof OutsideLeanFragment) return { unsupported: error.message };
     throw error;

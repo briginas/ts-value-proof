@@ -86,14 +86,16 @@ elan toolchain install leanprover/lean4:v4.19.0
 Normal verification uses a local installation. It works offline and never
 downloads Lean. The npm package and Z3 also work on machines without Lean.
 Lean supports `bigint` literals and parameters, addition, subtraction, unary
-minus, multiplication, comparisons, Boolean connectives and branching. It uses
+minus, multiplication, division, comparisons, Boolean connectives and branching. It uses
 exact integers for both factors. For `x * x`, Lean proves `result >= 0n` for
 every input. For `x * y`, it proves the same condition when both inputs are
 nonnegative and refutes it when their signs are unrestricted.
 
-Scope is per condition. A factor that depends on division or an abstract call
-result makes the condition `unsupported`. A supported product can still receive
-`unknown` if Lean cannot establish either verdict within its proof budget.
+Scope is per condition. Lean checks that every evaluated divisor is nonzero before
+accepting a proof or a refutation. A precondition such as `y !== 0n` or a branch
+such as `y === 0n ? 0n : x / y` can establish this. The quotient truncates toward
+zero, so `-7n / 3n === -2n`. A reachable zero divisor or an inconclusive proof
+gives Lean status `unknown`. An abstract call result gives `unsupported`.
 
 For existence proofs, including violations, Lean currently tries combinations
 of `0`, `1` and `-1`. A condition such as `x === 42n` can therefore be

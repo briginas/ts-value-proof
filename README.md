@@ -67,6 +67,8 @@ or `unknown` (2). Try `examples/withdraw.ts` for an intentional contract violati
 With a compatible local Lean 4 installation, the CLI, API and Vite also check
 supported `bigint` contracts independently. Both engines prove `result >= 0n`
 for `square` in [the multiplication example](examples/multiplication.ts).
+In [the division example](examples/division.ts), both verify the guarded quotient
+and confirm that `-7n / 3n === -2n`.
 For the unsafe call in `payUnchecked`, both engines report `disproved` and
 `crossCheck.comparison` is `agreed`.
 Without Lean, Z3 still reports the violation and the comparison is `unconfirmed`.
