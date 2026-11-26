@@ -17,7 +17,7 @@ npm pack --ignore-scripts
 In the consuming project, install the resulting tarball and Vite:
 
 ```sh
-npm install --save-dev /absolute/path/to/ts-value-proof-0.1.0.tgz vite@^8.3.8
+npm install --save-dev /absolute/path/to/ts-value-proof-0.2.0.tgz vite@^8.3.8
 ```
 
 Node.js `^24.12.0 || >=26.0.0` is required. `build:package` compiles this tool;
